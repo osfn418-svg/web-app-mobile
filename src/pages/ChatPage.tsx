@@ -66,7 +66,11 @@ export default function ChatPage() {
   }, [messages]);
 
   const handleSend = async () => {
-    if (!input.trim() || loading || !user) return;
+    if (!user) {
+      toast.error('يرجى تسجيل الدخول أولاً');
+      return;
+    }
+    if (!input.trim() || loading) return;
 
     const userMessage: Message = {
       id: Date.now().toString(),

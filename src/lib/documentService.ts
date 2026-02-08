@@ -1,3 +1,5 @@
+import { readDocumentFileAsText } from "@/lib/readDocumentFile";
+
 const ANALYZE_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/analyze-document`;
 
 type Message = { role: 'user' | 'assistant'; content: string };
@@ -106,12 +108,7 @@ export async function streamDocumentAnalysis({
   }
 }
 
-// Helper to read file as text
+// Helper to read file as text (supports .txt and PDF)
 export async function readFileAsText(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result as string);
-    reader.onerror = () => reject(new Error('فشل قراءة الملف'));
-    reader.readAsText(file);
-  });
+  return readDocumentFileAsText(file);
 }
