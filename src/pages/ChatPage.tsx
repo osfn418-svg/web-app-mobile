@@ -1,11 +1,15 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { 
   ArrowRight, 
   Send, 
   Copy, 
   RefreshCw,
-  Sparkles
+  Sparkles,
+  History,
+  Plus,
+  Trash2,
+  X
 } from 'lucide-react';
 import { Link, useParams } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
@@ -13,6 +17,7 @@ import { streamChat } from '@/lib/chatService';
 import { toast } from 'sonner';
 import MessageContent from '@/components/chat/MessageContent';
 import ModelSelector from '@/components/chat/ModelSelector';
+import { useChatPersistence } from '@/hooks/useChatPersistence';
 
 interface Message {
   id: string;
@@ -20,39 +25,55 @@ interface Message {
   content: string;
 }
 
-const toolInfo: Record<string, { name: string; icon: string; type: string }> = {
-  assistant: { name: 'الذكاء المساعد', icon: '🤖', type: 'assistant' },
-  code: { name: 'محرر الأكواد', icon: '💻', type: 'code' },
-  document: { name: 'محلل المستندات', icon: '📄', type: 'document' },
-  'prompt-maker': { name: 'صانع الأوامر', icon: '✨', type: 'prompt' },
+const toolInfo: Record<string, { name: string; icon: string; type: string; dbId: string }> = {
+  assistant: { name: 'الذكاء المساعد', icon: '🤖', type: 'assistant', dbId: 'ee7a12c4-d19f-4fb9-94f5-c66702b6e97c' },
+  code: { name: 'محرر الأكواد', icon: '💻', type: 'code', dbId: 'ee7a12c4-d19f-4fb9-94f5-c66702b6e97c' },
+  document: { name: 'محلل المستندات', icon: '📄', type: 'document', dbId: 'ee7a12c4-d19f-4fb9-94f5-c66702b6e97c' },
+  'prompt-maker': { name: 'صانع الأوامر', icon: '✨', type: 'prompt', dbId: 'ee7a12c4-d19f-4fb9-94f5-c66702b6e97c' },
 };
 
 export default function ChatPage() {
   const { toolId } = useParams();
-  const { profile } = useAuth();
+  const { profile, user } = useAuth();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [selectedModel, setSelectedModel] = useState('gemini-3');
+  const [showHistory, setShowHistory] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const tool = toolInfo[toolId || 'assistant'] || toolInfo.assistant;
+  
+  const {
+    conversationId,
+    conversations,
+    createConversation,
+    saveMessage,
+    loadMessages,
+    deleteConversation,
+    startNewChat,
+    savedMessages,
+  } = useChatPersistence(tool.dbId);
 
+  // Initialize with welcome message or loaded messages
   useEffect(() => {
-    // Welcome message
-    setMessages([{
-      id: '1',
-      role: 'assistant',
-      content: `مرحباً ${profile?.full_name || ''}! 👋 أنا ${tool.name}. كيف يمكنني مساعدتك اليوم؟`,
-    }]);
-  }, [toolId, profile]);
+    if (savedMessages.length > 0) {
+      setMessages(savedMessages);
+    } else {
+      setMessages([{
+        id: '1',
+        role: 'assistant',
+        content: `مرحباً ${profile?.full_name || ''}! 👋 أنا ${tool.name}. كيف يمكنني مساعدتك اليوم؟`,
+      }]);
+    }
+  }, [toolId, profile, savedMessages, tool.name]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
   const handleSend = async () => {
-    if (!input.trim() || loading) return;
+    if (!input.trim() || loading || !user) return;
 
     const userMessage: Message = {
       id: Date.now().toString(),
@@ -63,6 +84,20 @@ export default function ChatPage() {
     setMessages(prev => [...prev, userMessage]);
     setInput('');
     setLoading(true);
+
+    // Create conversation if this is the first message
+    let currentConvId = conversationId;
+    if (!currentConvId) {
+      currentConvId = await createConversation(input);
+      if (!currentConvId) {
+        toast.error('فشل في إنشاء المحادثة');
+        setLoading(false);
+        return;
+      }
+    }
+
+    // Save user message
+    await saveMessage(currentConvId, 'user', input);
 
     let assistantContent = '';
 
@@ -87,10 +122,14 @@ export default function ChatPage() {
         })),
         toolType: tool.type,
         onDelta: updateAssistant,
-        onDone: () => {
+        onDone: async () => {
           setMessages(prev => 
             prev.map(m => m.id === 'streaming' ? { ...m, id: Date.now().toString() } : m)
           );
+          // Save assistant response
+          if (currentConvId && assistantContent) {
+            await saveMessage(currentConvId, 'assistant', assistantContent);
+          }
           setLoading(false);
         },
         onError: (error) => {
@@ -107,6 +146,27 @@ export default function ChatPage() {
   const handleCopy = (text: string) => {
     navigator.clipboard.writeText(text);
     toast.success('تم النسخ');
+  };
+
+  const handleNewChat = () => {
+    startNewChat();
+    setMessages([{
+      id: '1',
+      role: 'assistant',
+      content: `مرحباً ${profile?.full_name || ''}! 👋 أنا ${tool.name}. كيف يمكنني مساعدتك اليوم؟`,
+    }]);
+    setShowHistory(false);
+  };
+
+  const handleLoadConversation = async (convId: string) => {
+    await loadMessages(convId);
+    setShowHistory(false);
+  };
+
+  const handleDeleteConversation = async (convId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    await deleteConversation(convId);
+    toast.success('تم حذف المحادثة');
   };
 
   const handleRegenerate = async (messageIndex: number) => {
@@ -141,10 +201,14 @@ export default function ChatPage() {
         })),
         toolType: tool.type,
         onDelta: updateAssistant,
-        onDone: () => {
+        onDone: async () => {
           setMessages(prev => 
             prev.map(m => m.id === 'streaming' ? { ...m, id: Date.now().toString() } : m)
           );
+          // Save regenerated response
+          if (conversationId && assistantContent) {
+            await saveMessage(conversationId, 'assistant', assistantContent);
+          }
           setLoading(false);
         },
         onError: (error) => {
@@ -178,12 +242,81 @@ export default function ChatPage() {
               </p>
             </div>
           </div>
-          <ModelSelector 
-            selectedModel={selectedModel} 
-            onSelectModel={setSelectedModel} 
-          />
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowHistory(!showHistory)}
+              className="p-2 hover:bg-muted rounded-xl transition-colors"
+              title="السجلات"
+            >
+              <History className="w-5 h-5 text-muted-foreground" />
+            </button>
+            <button
+              onClick={handleNewChat}
+              className="p-2 hover:bg-muted rounded-xl transition-colors"
+              title="محادثة جديدة"
+            >
+              <Plus className="w-5 h-5 text-muted-foreground" />
+            </button>
+            <ModelSelector 
+              selectedModel={selectedModel} 
+              onSelectModel={setSelectedModel} 
+            />
+          </div>
         </div>
       </header>
+
+      {/* History Sidebar */}
+      {showHistory && (
+        <motion.div
+          initial={{ opacity: 0, x: 100 }}
+          animate={{ opacity: 1, x: 0 }}
+          exit={{ opacity: 0, x: 100 }}
+          className="fixed inset-0 z-50 flex justify-end"
+        >
+          <div className="absolute inset-0 bg-black/50" onClick={() => setShowHistory(false)} />
+          <div className="relative w-80 max-w-full bg-card border-r border-border h-full overflow-y-auto">
+            <div className="sticky top-0 bg-card p-4 border-b border-border flex items-center justify-between">
+              <h2 className="font-semibold text-foreground">سجل المحادثات</h2>
+              <button onClick={() => setShowHistory(false)} className="p-2 hover:bg-muted rounded-lg">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-4 space-y-2">
+              {conversations.length === 0 ? (
+                <p className="text-center text-muted-foreground py-8">لا توجد محادثات سابقة</p>
+              ) : (
+                conversations.map((conv) => (
+                  <motion.div
+                    key={conv.id}
+                    whileHover={{ scale: 1.02 }}
+                    onClick={() => handleLoadConversation(conv.id)}
+                    className={`p-3 rounded-xl cursor-pointer transition-colors group ${
+                      conversationId === conv.id ? 'bg-primary/20' : 'bg-muted hover:bg-muted/80'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-foreground truncate">
+                          {conv.title || 'محادثة بدون عنوان'}
+                        </p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {new Date(conv.created_at).toLocaleDateString('ar-SA')}
+                        </p>
+                      </div>
+                      <button
+                        onClick={(e) => handleDeleteConversation(conv.id, e)}
+                        className="p-1.5 hover:bg-destructive/20 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity"
+                      >
+                        <Trash2 className="w-4 h-4 text-destructive" />
+                      </button>
+                    </div>
+                  </motion.div>
+                ))
+              )}
+            </div>
+          </div>
+        </motion.div>
+      )}
 
       {/* Messages */}
       <main className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
