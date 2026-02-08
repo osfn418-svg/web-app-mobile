@@ -121,16 +121,45 @@ export function useSubscriptionPlans() {
 }
 
 export function useAllProfiles() {
-  const fetcher = useCallback(async () => {
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('*, user_roles(role), user_subscriptions(*, subscription_plans(*))')
-      .order('created_at', { ascending: false });
-    if (error) throw error;
-    return data || [];
+  const [data, setData] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  
+  const fetchData = useCallback(async () => {
+    try {
+      setLoading(true);
+      const { data: profiles, error: fetchError } = await supabase
+        .from('profiles')
+        .select('*, user_roles(role), user_subscriptions(*, subscription_plans(*))')
+        .order('created_at', { ascending: false });
+      
+      if (fetchError) {
+        console.error('Error fetching profiles:', fetchError);
+        setError(fetchError.message);
+      } else {
+        setData(profiles || []);
+        setError(null);
+      }
+    } catch (err) {
+      console.error('Error in useAllProfiles:', err);
+      setError(err instanceof Error ? err.message : 'Unknown error');
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
-  return useRealtimeData('profiles', fetcher);
+  useEffect(() => {
+    fetchData();
+
+    const channel = supabase
+      .channel('admin-profiles')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, fetchData)
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [fetchData]);
+
+  return { data, loading, error, refetch: fetchData };
 }
 
 // Admin hooks - fetch all including inactive
