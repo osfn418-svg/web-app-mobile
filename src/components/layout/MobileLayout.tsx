@@ -1,5 +1,6 @@
 import { ReactNode } from 'react';
 import BottomNavigation from './BottomNavigation';
+import QuickToolsMenu from '../ui/QuickToolsMenu';
 
 interface MobileLayoutProps {
   children: ReactNode;
@@ -12,7 +13,12 @@ export default function MobileLayout({ children, hideNav = false }: MobileLayout
       <main className={`${hideNav ? '' : 'pb-24'} safe-top`}>
         {children}
       </main>
-      {!hideNav && <BottomNavigation />}
+      {!hideNav && (
+        <>
+          <QuickToolsMenu />
+          <BottomNavigation />
+        </>
+      )}
     </div>
   );
 }

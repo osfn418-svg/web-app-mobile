@@ -5,17 +5,23 @@ import { Link } from 'react-router-dom';
 import MobileLayout from '@/components/layout/MobileLayout';
 import ToolCard from '@/components/cards/ToolCard';
 import { useAuth } from '@/contexts/AuthContext';
-import { AITool, getAllTools, ChatConversation, getChatHistory } from '@/lib/database';
+import { AITool, getAllTools, ChatConversation, getChatHistory, db, Category } from '@/lib/database';
 
 export default function HomePage() {
   const { user, isPro } = useAuth();
   const [tools, setTools] = useState<AITool[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [selectedCategory, setSelectedCategory] = useState<number | null>(null);
   const [recentActivity, setRecentActivity] = useState<ChatConversation[]>([]);
 
   useEffect(() => {
     const loadData = async () => {
-      const allTools = await getAllTools();
+      const [allTools, allCategories] = await Promise.all([
+        getAllTools(),
+        db.categories.toArray()
+      ]);
       setTools(allTools);
+      setCategories(allCategories);
 
       if (user?.user_id) {
         const history = await getChatHistory(user.user_id);
@@ -25,8 +31,9 @@ export default function HomePage() {
     loadData();
   }, [user]);
 
-  const proTools = tools.filter(t => t.requires_subscription);
-  const freeTools = tools.filter(t => !t.requires_subscription);
+  const filteredTools = selectedCategory === null 
+    ? tools 
+    : tools.filter(t => t.category_id === selectedCategory);
 
   return (
     <MobileLayout>
@@ -98,23 +105,34 @@ export default function HomePage() {
           
           {/* Filter tabs */}
           <div className="flex gap-2 mb-4 overflow-x-auto pb-2 scrollbar-hide">
-            {['الكل', 'صور', 'فيديو', 'صوتيات', 'محادثة'].map((tab, index) => (
+            <button
+              onClick={() => setSelectedCategory(null)}
+              className={`px-4 py-2 rounded-full text-sm whitespace-nowrap transition-colors ${
+                selectedCategory === null
+                  ? 'bg-primary text-primary-foreground'
+                  : 'bg-muted text-muted-foreground hover:bg-muted/80'
+              }`}
+            >
+              الكل
+            </button>
+            {categories.map((category) => (
               <button
-                key={tab}
+                key={category.category_id}
+                onClick={() => setSelectedCategory(category.category_id!)}
                 className={`px-4 py-2 rounded-full text-sm whitespace-nowrap transition-colors ${
-                  index === 0 
-                    ? 'bg-primary text-primary-foreground' 
+                  selectedCategory === category.category_id
+                    ? 'bg-primary text-primary-foreground'
                     : 'bg-muted text-muted-foreground hover:bg-muted/80'
                 }`}
               >
-                {tab}
+                {category.category_name}
               </button>
             ))}
           </div>
 
           {/* Tools grid */}
           <div className="grid grid-cols-2 gap-3">
-            {tools.slice(0, 6).map((tool, index) => (
+            {filteredTools.slice(0, 6).map((tool, index) => (
               <motion.div
                 key={tool.tool_id}
                 initial={{ opacity: 0, y: 20 }}
@@ -125,6 +143,12 @@ export default function HomePage() {
               </motion.div>
             ))}
           </div>
+          
+          {filteredTools.length === 0 && (
+            <div className="text-center py-8">
+              <p className="text-muted-foreground">لا توجد أدوات في هذه الفئة</p>
+            </div>
+          )}
         </motion.div>
 
         {/* Recent Activity */}

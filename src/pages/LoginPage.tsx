@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Mail, Lock, Eye, EyeOff } from 'lucide-react';
+import { Mail, Lock, Eye, EyeOff, RefreshCw } from 'lucide-react';
 import NeonButton from '@/components/ui/NeonButton';
 import NeonInput from '@/components/ui/NeonInput';
 import { useAuth } from '@/contexts/AuthContext';
+import { resetDatabase } from '@/lib/database';
 import { toast } from 'sonner';
 
 export default function LoginPage() {
@@ -12,8 +13,22 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [resetting, setResetting] = useState(false);
   const { login } = useAuth();
   const navigate = useNavigate();
+
+  const handleReset = async () => {
+    setResetting(true);
+    try {
+      await resetDatabase();
+      toast.success('تم إعادة تعيين قاعدة البيانات. يمكنك الآن تسجيل الدخول بالحسابات الجديدة.');
+      window.location.reload();
+    } catch (error) {
+      toast.error('حدث خطأ');
+    } finally {
+      setResetting(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -153,10 +168,22 @@ export default function LoginPage() {
         </p>
 
         {/* Demo credentials hint */}
-        <div className="mt-4 p-3 rounded-xl bg-muted/50 text-center">
+        <div className="mt-4 p-3 rounded-xl bg-muted/50 text-center space-y-2">
           <p className="text-xs text-muted-foreground">
-            للتجربة: demo@example.com / demo123
+            <strong>الأدمن:</strong> osamasufyanos@gmail.com / os00
           </p>
+          <p className="text-xs text-muted-foreground">
+            <strong>للتجربة:</strong> demo@example.com / demo123
+          </p>
+          <button
+            type="button"
+            onClick={handleReset}
+            disabled={resetting}
+            className="text-xs text-primary hover:underline flex items-center gap-1 mx-auto"
+          >
+            <RefreshCw className={`w-3 h-3 ${resetting ? 'animate-spin' : ''}`} />
+            إعادة تعيين قاعدة البيانات
+          </button>
         </div>
       </motion.div>
     </div>

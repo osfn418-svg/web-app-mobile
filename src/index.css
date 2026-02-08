@@ -8,6 +8,72 @@
 
 @layer base {
   :root {
+    /* Light theme colors */
+    --background: 210 40% 98%;
+    --foreground: 222 47% 11%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+
+    /* Neon Cyan Primary */
+    --primary: 186 100% 40%;
+    --primary-foreground: 0 0% 100%;
+
+    /* Deep Purple Secondary */
+    --secondary: 270 60% 50%;
+    --secondary-foreground: 0 0% 100%;
+
+    /* Muted surfaces */
+    --muted: 210 40% 96%;
+    --muted-foreground: 215 16% 47%;
+
+    /* Accent - Electric Blue */
+    --accent: 210 100% 55%;
+    --accent-foreground: 0 0% 100%;
+
+    /* States */
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+
+    --success: 142 70% 45%;
+    --success-foreground: 0 0% 100%;
+
+    --warning: 45 100% 50%;
+    --warning-foreground: 222 47% 5%;
+
+    /* Borders and inputs */
+    --border: 214 32% 91%;
+    --input: 214 32% 91%;
+    --ring: 186 100% 40%;
+
+    --radius: 0.75rem;
+
+    /* Gradients */
+    --gradient-neon: linear-gradient(135deg, hsl(186 100% 40%), hsl(270 60% 50%));
+    --gradient-card: linear-gradient(180deg, hsl(0 0% 100%), hsl(210 40% 98%));
+    --gradient-glow: linear-gradient(135deg, hsl(186 100% 50% / 0.2), hsl(270 60% 50% / 0.2));
+    --gradient-pro: linear-gradient(135deg, hsl(45 100% 50%), hsl(35 100% 55%));
+
+    /* Shadows */
+    --shadow-neon: 0 0 20px hsl(186 100% 50% / 0.2), 0 0 40px hsl(186 100% 50% / 0.1);
+    --shadow-card: 0 4px 24px hsl(0 0% 0% / 0.1);
+    --shadow-glow-sm: 0 0 10px hsl(186 100% 50% / 0.15);
+
+    /* Sidebar */
+    --sidebar-background: 0 0% 100%;
+    --sidebar-foreground: 222 47% 11%;
+    --sidebar-primary: 186 100% 40%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 210 40% 96%;
+    --sidebar-accent-foreground: 222 47% 11%;
+    --sidebar-border: 214 32% 91%;
+    --sidebar-ring: 186 100% 40%;
+  }
+
+  .dark {
     /* Core colors - Dark theme with neon accents */
     --background: 222 47% 5%;
     --foreground: 210 40% 98%;
@@ -49,9 +115,7 @@
     --input: 222 30% 15%;
     --ring: 186 100% 50%;
 
-    --radius: 0.75rem;
-
-    /* Neon Gradients */
+    /* Gradients */
     --gradient-neon: linear-gradient(135deg, hsl(186 100% 50%), hsl(270 60% 50%));
     --gradient-card: linear-gradient(180deg, hsl(222 47% 10%), hsl(222 47% 6%));
     --gradient-glow: linear-gradient(135deg, hsl(186 100% 50% / 0.2), hsl(270 60% 50% / 0.2));

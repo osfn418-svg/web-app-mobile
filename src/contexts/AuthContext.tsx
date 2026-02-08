@@ -8,6 +8,7 @@ interface AuthContextType {
   login: (email: string, password: string) => Promise<boolean>;
   register: (data: { username: string; email: string; password: string; full_name: string }) => Promise<boolean>;
   logout: () => void;
+  refreshSubscription: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -16,6 +17,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isPro, setIsPro] = useState(false);
+
+  const checkSubscription = async (userId: number) => {
+    const subscription = await getUserSubscription(userId);
+    if (subscription) {
+      const plan = await getSubscriptionPlan(subscription.plan_id);
+      setIsPro(plan?.plan_name === 'Nexus Pro' || plan?.plan_name === 'للشركات');
+    } else {
+      setIsPro(false);
+    }
+  };
+
+  const refreshSubscription = async () => {
+    if (user?.user_id) {
+      await checkSubscription(user.user_id);
+    }
+  };
 
   useEffect(() => {
     const init = async () => {
@@ -27,13 +44,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const userData = await db.users.get(parseInt(storedUserId));
         if (userData && userData.is_active) {
           setUser(userData);
-          
-          // Check subscription
-          const subscription = await getUserSubscription(userData.user_id!);
-          if (subscription) {
-            const plan = await getSubscriptionPlan(subscription.plan_id);
-            setIsPro(plan?.plan_name === 'Nexus Pro' || plan?.plan_name === 'للشركات');
-          }
+          await checkSubscription(userData.user_id!);
         }
       }
       setIsLoading(false);
@@ -47,13 +58,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (userData) {
       setUser(userData);
       localStorage.setItem('nexus_user_id', String(userData.user_id));
-      
-      const subscription = await getUserSubscription(userData.user_id!);
-      if (subscription) {
-        const plan = await getSubscriptionPlan(subscription.plan_id);
-        setIsPro(plan?.plan_name === 'Nexus Pro' || plan?.plan_name === 'للشركات');
-      }
-      
+      await checkSubscription(userData.user_id!);
       return true;
     }
     return false;
@@ -87,7 +92,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, isLoading, isPro, login, register, logout }}>
+    <AuthContext.Provider value={{ user, isLoading, isPro, login, register, logout, refreshSubscription }}>
       {children}
     </AuthContext.Provider>
   );
