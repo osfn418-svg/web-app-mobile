@@ -5,14 +5,17 @@ import {
   Upload,
   FileText,
   Sparkles,
-  MessageSquare,
   Send,
   Loader2,
-  X
+  X,
+  ClipboardPaste,
+  AlertCircle
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
+import { streamDocumentAnalysis, readFileAsText } from '@/lib/documentService';
+import ReactMarkdown from 'react-markdown';
 
 interface Message {
   id: string;
@@ -20,14 +23,20 @@ interface Message {
   content: string;
 }
 
+type InputMode = 'upload' | 'paste';
+
 export default function DocumentAnalyzerPage() {
   const { isPro } = useAuth();
+  const [inputMode, setInputMode] = useState<InputMode>('paste');
   const [file, setFile] = useState<File | null>(null);
+  const [pastedText, setPastedText] = useState('');
+  const [documentText, setDocumentText] = useState('');
   const [analyzing, setAnalyzing] = useState(false);
   const [analyzed, setAnalyzed] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -35,36 +44,82 @@ export default function DocumentAnalyzerPage() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
     if (selectedFile) {
-      if (!isPro) {
-        toast.error('هذه الميزة متاحة فقط لمشتركي Pro');
+      // Check file type - only text files for now
+      if (!selectedFile.type.includes('text') && !selectedFile.name.endsWith('.txt')) {
+        toast.error('حالياً يدعم الملفات النصية فقط (.txt)');
+        return;
+      }
+      if (selectedFile.size > 1024 * 1024) {
+        toast.error('الحد الأقصى للملف 1 ميجابايت');
         return;
       }
       setFile(selectedFile);
+      try {
+        const text = await readFileAsText(selectedFile);
+        setDocumentText(text);
+      } catch {
+        toast.error('فشل قراءة الملف');
+      }
     }
   };
 
   const analyzeDocument = async () => {
-    if (!file) return;
+    const textToAnalyze = inputMode === 'paste' ? pastedText : documentText;
     
+    if (!textToAnalyze.trim()) {
+      toast.error('يرجى إدخال نص للتحليل');
+      return;
+    }
+    
+    if (textToAnalyze.trim().length < 50) {
+      toast.error('النص قصير جداً، يرجى إدخال نص أطول للتحليل');
+      return;
+    }
+
     setAnalyzing(true);
-    
+    setError(null);
+    setDocumentText(textToAnalyze);
+
+    // Create initial assistant message
+    const assistantId = Date.now().toString();
+    setMessages([{
+      id: assistantId,
+      role: 'assistant',
+      content: '',
+    }]);
+
     try {
-      await new Promise(resolve => setTimeout(resolve, 2500));
-      
-      setAnalyzed(true);
-      setMessages([{
-        id: '1',
-        role: 'assistant',
-        content: `تم تحليل المستند "${file.name}" بنجاح! 📄\n\n**ملخص المستند:**\nهذا المستند يتضمن معلومات مهمة حول الموضوع المحدد. تم استخراج النقاط الرئيسية والبيانات الهامة.\n\n**إحصائيات:**\n• عدد الصفحات: ${Math.floor(Math.random() * 20) + 5}\n• عدد الكلمات: ${Math.floor(Math.random() * 5000) + 1000}\n• اللغة: العربية\n\nيمكنك الآن طرح أي سؤال حول محتوى المستند!`,
-      }]);
-      toast.success('تم تحليل المستند بنجاح!');
-    } catch (error) {
-      toast.error('حدث خطأ أثناء التحليل');
-    } finally {
+      await streamDocumentAnalysis({
+        action: 'analyze',
+        documentText: textToAnalyze,
+        onDelta: (delta) => {
+          setMessages(prev => {
+            const last = prev[prev.length - 1];
+            if (last?.role === 'assistant') {
+              return prev.map((m, i) => 
+                i === prev.length - 1 ? { ...m, content: m.content + delta } : m
+              );
+            }
+            return prev;
+          });
+        },
+        onDone: () => {
+          setAnalyzed(true);
+          setAnalyzing(false);
+          toast.success('تم تحليل المستند بنجاح!');
+        },
+        onError: (err) => {
+          setError(err);
+          setAnalyzing(false);
+          toast.error(err);
+        },
+      });
+    } catch {
       setAnalyzing(false);
+      toast.error('حدث خطأ أثناء التحليل');
     }
   };
 
@@ -81,121 +136,184 @@ export default function DocumentAnalyzerPage() {
     setInput('');
     setLoading(true);
 
-    try {
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      
-      const responses = [
-        `بناءً على تحليل المستند، يمكنني الإجابة على سؤالك:\n\n${input.slice(0, 30)}...\n\nالإجابة هي أن المستند يتضمن معلومات تتعلق بهذا الموضوع في القسم الثاني والرابع. هل تريد المزيد من التفاصيل؟`,
-        `وجدت المعلومات التالية في المستند:\n\n• النقطة الأولى المتعلقة بسؤالك\n• تفاصيل إضافية من الصفحة 3\n• ملاحظات هامة من الملحق\n\nهل هناك شيء آخر تريد معرفته؟`,
-        `بعد مراجعة المستند، إليك الإجابة:\n\nالمستند يوضح هذه النقطة بشكل تفصيلي في الفصل الثاني. يمكنني تلخيص المحتوى أو اقتباس الجزء المحدد إذا أردت.`,
-      ];
-      
-      const assistantMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        role: 'assistant',
-        content: responses[Math.floor(Math.random() * responses.length)],
-      };
+    const assistantId = (Date.now() + 1).toString();
+    setMessages(prev => [...prev, { id: assistantId, role: 'assistant', content: '' }]);
 
-      setMessages(prev => [...prev, assistantMessage]);
-    } catch (error) {
-      toast.error('حدث خطأ');
-    } finally {
+    try {
+      await streamDocumentAnalysis({
+        action: 'chat',
+        documentText,
+        question: input,
+        messages: messages.filter(m => m.content.trim()),
+        onDelta: (delta) => {
+          setMessages(prev => {
+            const last = prev[prev.length - 1];
+            if (last?.role === 'assistant') {
+              return prev.map((m, i) => 
+                i === prev.length - 1 ? { ...m, content: m.content + delta } : m
+              );
+            }
+            return prev;
+          });
+        },
+        onDone: () => {
+          setLoading(false);
+        },
+        onError: (err) => {
+          setLoading(false);
+          toast.error(err);
+        },
+      });
+    } catch {
       setLoading(false);
+      toast.error('حدث خطأ');
     }
   };
 
-  const removeFile = () => {
+  const removeDocument = () => {
     setFile(null);
+    setPastedText('');
+    setDocumentText('');
     setAnalyzed(false);
     setMessages([]);
+    setError(null);
   };
+
+  const showUploadOrPaste = !analyzed && !analyzing;
 
   return (
     <div className="min-h-screen bg-background flex flex-col" dir="rtl">
       {/* Header */}
-      <header className="glass sticky top-0 z-40 px-4 py-3 safe-top">
+      <header className="glass sticky top-0 z-40 px-4 py-3 safe-top border-b border-border/50">
         <div className="flex items-center gap-3">
           <Link to="/home" className="p-2 hover:bg-muted rounded-xl transition-colors">
             <ArrowRight className="w-5 h-5 text-foreground" />
           </Link>
           <div className="flex items-center gap-3 flex-1">
-            <div className="w-10 h-10 rounded-xl bg-muted flex items-center justify-center text-xl">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary/20 to-secondary/20 flex items-center justify-center text-xl border border-primary/30">
               📄
             </div>
             <div>
               <h1 className="font-semibold text-foreground">محلل المستندات</h1>
-              <p className="text-xs text-muted-foreground">استخراج وتحليل البيانات</p>
+              <p className="text-xs text-success flex items-center gap-1">
+                <span className="w-2 h-2 bg-success rounded-full animate-pulse"></span>
+                متصل بـ AI حقيقي
+              </p>
             </div>
           </div>
-          <span className="pro-badge">PRO</span>
         </div>
       </header>
 
       <main className="flex-1 overflow-y-auto px-4 py-6">
-        {!file ? (
-          /* Upload Area */
+        {showUploadOrPaste ? (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="flex flex-col items-center justify-center h-full min-h-[400px]"
+            className="space-y-4"
           >
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".pdf,.doc,.docx,.txt"
-              onChange={handleFileSelect}
-              className="hidden"
-            />
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              className="w-full max-w-sm glass-card rounded-2xl p-8 border-2 border-dashed border-border hover:border-primary transition-colors flex flex-col items-center gap-4"
-            >
-              <div className="w-20 h-20 rounded-2xl bg-muted flex items-center justify-center">
-                <Upload className="w-10 h-10 text-primary" />
-              </div>
-              <div className="text-center">
-                <h3 className="text-lg font-semibold text-foreground mb-2">ارفع مستندك</h3>
-                <p className="text-sm text-muted-foreground">
-                  PDF, Word, أو ملف نصي
-                </p>
-                <p className="text-xs text-muted-foreground mt-2">
-                  الحد الأقصى: 10 ميجابايت
-                </p>
-              </div>
-            </button>
-          </motion.div>
-        ) : !analyzed ? (
-          /* File Preview & Analyze */
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="space-y-6"
-          >
-            <div className="glass-card rounded-2xl p-6">
-              <div className="flex items-center gap-4">
-                <div className="w-16 h-16 rounded-xl bg-primary/20 flex items-center justify-center">
-                  <FileText className="w-8 h-8 text-primary" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <h3 className="font-semibold text-foreground truncate">{file.name}</h3>
-                  <p className="text-sm text-muted-foreground">
-                    {(file.size / 1024).toFixed(1)} KB
-                  </p>
-                </div>
-                <button
-                  onClick={removeFile}
-                  className="p-2 hover:bg-muted rounded-lg transition-colors"
-                >
-                  <X className="w-5 h-5 text-muted-foreground" />
-                </button>
-              </div>
+            {/* Mode Tabs */}
+            <div className="flex gap-2 mb-4">
+              <button
+                onClick={() => setInputMode('paste')}
+                className={`flex-1 py-3 rounded-xl text-sm font-medium transition-all flex items-center justify-center gap-2 ${
+                  inputMode === 'paste'
+                    ? 'bg-primary text-primary-foreground shadow-lg shadow-primary/20'
+                    : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                }`}
+              >
+                <ClipboardPaste className="w-4 h-4" />
+                لصق النص
+              </button>
+              <button
+                onClick={() => setInputMode('upload')}
+                className={`flex-1 py-3 rounded-xl text-sm font-medium transition-all flex items-center justify-center gap-2 ${
+                  inputMode === 'upload'
+                    ? 'bg-primary text-primary-foreground shadow-lg shadow-primary/20'
+                    : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                }`}
+              >
+                <Upload className="w-4 h-4" />
+                رفع ملف
+              </button>
             </div>
 
+            {inputMode === 'paste' ? (
+              /* Paste Text Area */
+              <div className="space-y-4">
+                <div className="glass-card rounded-2xl p-4 border border-border/50">
+                  <textarea
+                    value={pastedText}
+                    onChange={(e) => setPastedText(e.target.value)}
+                    placeholder="الصق النص هنا للتحليل...
+
+مثال: مقال، تقرير، محتوى صفحة ويب، ملاحظات، أو أي نص تريد تحليله واستخلاص المعلومات منه."
+                    className="w-full h-64 bg-transparent text-foreground placeholder:text-muted-foreground resize-none focus:outline-none text-sm leading-relaxed"
+                    dir="rtl"
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground text-center">
+                  {pastedText.length} حرف • الحد الأدنى 50 حرف
+                </p>
+              </div>
+            ) : (
+              /* Upload Area */
+              <div className="space-y-4">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".txt"
+                  onChange={handleFileSelect}
+                  className="hidden"
+                />
+                
+                {!file ? (
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    className="w-full glass-card rounded-2xl p-8 border-2 border-dashed border-border hover:border-primary transition-colors flex flex-col items-center gap-4"
+                  >
+                    <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary/20 to-secondary/20 flex items-center justify-center border border-primary/30">
+                      <Upload className="w-8 h-8 text-primary" />
+                    </div>
+                    <div className="text-center">
+                      <h3 className="text-base font-semibold text-foreground mb-1">ارفع ملف نصي</h3>
+                      <p className="text-sm text-muted-foreground">
+                        ملفات .txt فقط حالياً
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        الحد الأقصى: 1 ميجابايت
+                      </p>
+                    </div>
+                  </button>
+                ) : (
+                  <div className="glass-card rounded-2xl p-4 border border-border/50">
+                    <div className="flex items-center gap-4">
+                      <div className="w-14 h-14 rounded-xl bg-primary/20 flex items-center justify-center border border-primary/30">
+                        <FileText className="w-7 h-7 text-primary" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <h3 className="font-semibold text-foreground truncate">{file.name}</h3>
+                        <p className="text-sm text-muted-foreground">
+                          {(file.size / 1024).toFixed(1)} KB • {documentText.length} حرف
+                        </p>
+                      </div>
+                      <button
+                        onClick={removeDocument}
+                        className="p-2 hover:bg-muted rounded-lg transition-colors"
+                      >
+                        <X className="w-5 h-5 text-muted-foreground" />
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Analyze Button */}
             <motion.button
               whileTap={{ scale: 0.98 }}
               onClick={analyzeDocument}
-              disabled={analyzing}
-              className="w-full py-4 bg-gradient-pro text-primary-foreground rounded-xl font-medium flex items-center justify-center gap-2 disabled:opacity-50"
+              disabled={analyzing || (inputMode === 'paste' ? !pastedText.trim() : !file)}
+              className="w-full py-4 bg-gradient-to-r from-primary to-secondary text-primary-foreground rounded-xl font-medium flex items-center justify-center gap-2 disabled:opacity-50 shadow-lg shadow-primary/20 hover:shadow-xl hover:shadow-primary/30 transition-all"
             >
               {analyzing ? (
                 <>
@@ -213,17 +331,28 @@ export default function DocumentAnalyzerPage() {
         ) : (
           /* Chat with Document */
           <div className="space-y-4">
-            {/* File Info */}
-            <div className="glass-card rounded-xl p-3 flex items-center gap-3">
+            {/* Document Info */}
+            <div className="glass-card rounded-xl p-3 flex items-center gap-3 border border-border/50">
               <FileText className="w-5 h-5 text-primary" />
-              <span className="text-sm text-foreground truncate flex-1">{file.name}</span>
+              <span className="text-sm text-foreground truncate flex-1">
+                {file?.name || 'نص ملصوق'}
+                <span className="text-muted-foreground text-xs mr-2">({documentText.length} حرف)</span>
+              </span>
               <button
-                onClick={removeFile}
-                className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                onClick={removeDocument}
+                className="text-xs text-primary hover:underline transition-colors"
               >
-                تغيير
+                مستند جديد
               </button>
             </div>
+
+            {/* Error Alert */}
+            {error && (
+              <div className="bg-destructive/10 border border-destructive/30 rounded-xl p-3 flex items-center gap-2">
+                <AlertCircle className="w-5 h-5 text-destructive" />
+                <span className="text-sm text-destructive">{error}</span>
+              </div>
+            )}
 
             {/* Messages */}
             <div className="space-y-4">
@@ -232,17 +361,23 @@ export default function DocumentAnalyzerPage() {
                   key={message.id}
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: index * 0.05 }}
+                  transition={{ delay: index * 0.02 }}
                   className={`flex ${message.role === 'user' ? 'justify-start' : 'justify-end'}`}
                 >
                   <div
-                    className={`max-w-[85%] rounded-2xl p-4 ${
+                    className={`max-w-[90%] rounded-2xl p-4 ${
                       message.role === 'user'
                         ? 'bg-primary text-primary-foreground rounded-tr-sm'
-                        : 'glass-card rounded-tl-sm'
+                        : 'glass-card rounded-tl-sm border border-border/50'
                     }`}
                   >
-                    <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+                    {message.role === 'assistant' ? (
+                      <div className="prose prose-sm dark:prose-invert max-w-none text-sm">
+                        <ReactMarkdown>{message.content || '...'}</ReactMarkdown>
+                      </div>
+                    ) : (
+                      <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+                    )}
                   </div>
                 </motion.div>
               ))}
@@ -253,9 +388,9 @@ export default function DocumentAnalyzerPage() {
                   animate={{ opacity: 1 }}
                   className="flex justify-end"
                 >
-                  <div className="glass-card rounded-2xl rounded-tl-sm p-4">
+                  <div className="glass-card rounded-2xl rounded-tl-sm p-4 border border-border/50">
                     <div className="flex items-center gap-2">
-                      <MessageSquare className="w-4 h-4 text-primary animate-pulse" />
+                      <Loader2 className="w-4 h-4 text-primary animate-spin" />
                       <span className="text-sm text-muted-foreground">جاري البحث في المستند...</span>
                     </div>
                   </div>
@@ -270,7 +405,7 @@ export default function DocumentAnalyzerPage() {
 
       {/* Input - Only show when analyzed */}
       {analyzed && (
-        <footer className="glass sticky bottom-0 px-4 py-4 safe-bottom">
+        <footer className="glass sticky bottom-0 px-4 py-4 safe-bottom border-t border-border/50">
           <div className="flex items-center gap-2">
             <div className="flex-1 relative">
               <input
@@ -279,14 +414,14 @@ export default function DocumentAnalyzerPage() {
                 onChange={(e) => setInput(e.target.value)}
                 onKeyPress={(e) => e.key === 'Enter' && handleSend()}
                 placeholder="اسأل عن محتوى المستند..."
-                className="w-full px-4 py-3 bg-muted border border-border rounded-xl text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary transition-colors"
+                className="w-full px-4 py-3 bg-muted border border-border rounded-xl text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20 transition-all"
               />
             </div>
             <motion.button
               whileTap={{ scale: 0.95 }}
               onClick={handleSend}
               disabled={!input.trim() || loading}
-              className="p-3 bg-primary text-primary-foreground rounded-xl disabled:opacity-50 disabled:cursor-not-allowed"
+              className="p-3 bg-primary text-primary-foreground rounded-xl disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-primary/20"
             >
               <Send className="w-5 h-5" />
             </motion.button>

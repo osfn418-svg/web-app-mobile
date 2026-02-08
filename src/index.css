@@ -75,66 +75,66 @@
 
   .dark {
     /* Core colors - Dark theme with neon accents */
-    --background: 222 47% 5%;
+    --background: 222 47% 4%;
     --foreground: 210 40% 98%;
 
-    --card: 222 47% 8%;
+    --card: 222 47% 7%;
     --card-foreground: 210 40% 98%;
 
-    --popover: 222 47% 8%;
+    --popover: 222 47% 7%;
     --popover-foreground: 210 40% 98%;
 
-    /* Neon Cyan Primary */
-    --primary: 186 100% 50%;
+    /* Neon Cyan Primary - brighter for better contrast */
+    --primary: 186 100% 55%;
     --primary-foreground: 222 47% 5%;
 
     /* Deep Purple Secondary */
-    --secondary: 270 60% 40%;
+    --secondary: 270 60% 45%;
     --secondary-foreground: 210 40% 98%;
 
-    /* Muted surfaces */
-    --muted: 222 30% 12%;
-    --muted-foreground: 215 20% 55%;
+    /* Muted surfaces - slightly more visible */
+    --muted: 222 28% 14%;
+    --muted-foreground: 215 25% 62%;
 
     /* Accent - Electric Blue */
-    --accent: 210 100% 55%;
+    --accent: 210 100% 58%;
     --accent-foreground: 222 47% 5%;
 
     /* States */
-    --destructive: 0 72% 51%;
+    --destructive: 0 72% 55%;
     --destructive-foreground: 210 40% 98%;
 
-    --success: 142 70% 45%;
+    --success: 142 70% 50%;
     --success-foreground: 210 40% 98%;
 
-    --warning: 45 100% 50%;
+    --warning: 45 100% 55%;
     --warning-foreground: 222 47% 5%;
 
-    /* Borders and inputs */
-    --border: 222 30% 18%;
-    --input: 222 30% 15%;
-    --ring: 186 100% 50%;
+    /* Borders and inputs - more visible */
+    --border: 222 25% 22%;
+    --input: 222 28% 16%;
+    --ring: 186 100% 55%;
 
     /* Gradients */
-    --gradient-neon: linear-gradient(135deg, hsl(186 100% 50%), hsl(270 60% 50%));
-    --gradient-card: linear-gradient(180deg, hsl(222 47% 10%), hsl(222 47% 6%));
-    --gradient-glow: linear-gradient(135deg, hsl(186 100% 50% / 0.2), hsl(270 60% 50% / 0.2));
-    --gradient-pro: linear-gradient(135deg, hsl(45 100% 50%), hsl(35 100% 55%));
+    --gradient-neon: linear-gradient(135deg, hsl(186 100% 55%), hsl(270 60% 55%));
+    --gradient-card: linear-gradient(180deg, hsl(222 47% 9%) 0%, hsl(222 47% 5%) 100%);
+    --gradient-glow: linear-gradient(135deg, hsl(186 100% 55% / 0.2), hsl(270 60% 55% / 0.2));
+    --gradient-pro: linear-gradient(135deg, hsl(45 100% 55%), hsl(35 100% 60%));
 
-    /* Shadows */
-    --shadow-neon: 0 0 20px hsl(186 100% 50% / 0.3), 0 0 40px hsl(186 100% 50% / 0.1);
-    --shadow-card: 0 4px 24px hsl(222 47% 5% / 0.5);
-    --shadow-glow-sm: 0 0 10px hsl(186 100% 50% / 0.2);
+    /* Shadows - more pronounced */
+    --shadow-neon: 0 0 25px hsl(186 100% 55% / 0.35), 0 0 50px hsl(186 100% 55% / 0.15);
+    --shadow-card: 0 8px 32px hsl(222 47% 3% / 0.6);
+    --shadow-glow-sm: 0 0 15px hsl(186 100% 55% / 0.25);
 
     /* Sidebar */
-    --sidebar-background: 222 47% 6%;
+    --sidebar-background: 222 47% 5%;
     --sidebar-foreground: 210 40% 98%;
-    --sidebar-primary: 186 100% 50%;
+    --sidebar-primary: 186 100% 55%;
     --sidebar-primary-foreground: 222 47% 5%;
-    --sidebar-accent: 222 30% 15%;
+    --sidebar-accent: 222 28% 16%;
     --sidebar-accent-foreground: 210 40% 98%;
-    --sidebar-border: 222 30% 18%;
-    --sidebar-ring: 186 100% 50%;
+    --sidebar-border: 222 25% 22%;
+    --sidebar-ring: 186 100% 55%;
   }
 }
 
@@ -161,37 +161,37 @@
 }
 
 @layer components {
-  /* Neon text glow */
+  /* Neon text glow - enhanced */
   .text-glow {
-    text-shadow: 0 0 10px hsl(186 100% 50% / 0.5), 0 0 20px hsl(186 100% 50% / 0.3);
+    text-shadow: 0 0 12px hsl(186 100% 55% / 0.6), 0 0 25px hsl(186 100% 55% / 0.35);
   }
 
   .text-glow-purple {
-    text-shadow: 0 0 10px hsl(270 60% 50% / 0.5), 0 0 20px hsl(270 60% 50% / 0.3);
+    text-shadow: 0 0 12px hsl(270 60% 55% / 0.6), 0 0 25px hsl(270 60% 55% / 0.35);
   }
 
-  /* Glass morphism */
+  /* Glass morphism - improved visibility */
   .glass {
-    background: hsl(222 47% 8% / 0.8);
-    backdrop-filter: blur(12px);
-    border: 1px solid hsl(222 30% 20% / 0.5);
+    background: hsl(222 47% 7% / 0.85);
+    backdrop-filter: blur(16px);
+    border: 1px solid hsl(222 25% 24% / 0.6);
   }
 
   .glass-card {
-    background: linear-gradient(180deg, hsl(222 47% 12% / 0.9) 0%, hsl(222 47% 8% / 0.8) 100%);
-    backdrop-filter: blur(16px);
-    border: 1px solid hsl(222 30% 25% / 0.4);
+    background: linear-gradient(180deg, hsl(222 47% 11% / 0.95) 0%, hsl(222 47% 7% / 0.9) 100%);
+    backdrop-filter: blur(20px);
+    border: 1px solid hsl(222 25% 28% / 0.5);
   }
 
-  /* Neon border */
+  /* Neon border - brighter */
   .neon-border {
-    border: 1px solid hsl(186 100% 50% / 0.3);
-    box-shadow: 0 0 10px hsl(186 100% 50% / 0.1), inset 0 0 10px hsl(186 100% 50% / 0.05);
+    border: 1px solid hsl(186 100% 55% / 0.4);
+    box-shadow: 0 0 15px hsl(186 100% 55% / 0.15), inset 0 0 12px hsl(186 100% 55% / 0.08);
   }
 
   .neon-border-purple {
-    border: 1px solid hsl(270 60% 50% / 0.3);
-    box-shadow: 0 0 10px hsl(270 60% 50% / 0.1), inset 0 0 10px hsl(270 60% 50% / 0.05);
+    border: 1px solid hsl(270 60% 55% / 0.4);
+    box-shadow: 0 0 15px hsl(270 60% 55% / 0.15), inset 0 0 12px hsl(270 60% 55% / 0.08);
   }
 
   /* Gradient backgrounds */
@@ -215,7 +215,7 @@
     position: relative;
   }
 
-  /* Bottom navigation */
+  /* Bottom navigation - enhanced */
   .bottom-nav {
     position: fixed;
     bottom: 0;
@@ -223,23 +223,24 @@
     transform: translateX(-50%);
     max-width: 430px;
     width: 100%;
-    background: hsl(222 47% 6% / 0.95);
-    backdrop-filter: blur(20px);
-    border-top: 1px solid hsl(222 30% 18%);
-    padding: 0.5rem 1rem 1.5rem;
+    background: hsl(222 47% 5% / 0.97);
+    backdrop-filter: blur(24px);
+    border-top: 1px solid hsl(222 25% 22%);
+    padding: 0.75rem 1rem 1.75rem;
     z-index: 50;
   }
 
-  /* Pro badge */
+  /* Pro badge - enhanced */
   .pro-badge {
     background: var(--gradient-pro);
     color: hsl(222 47% 5%);
-    font-weight: 600;
-    font-size: 0.65rem;
-    padding: 0.15rem 0.5rem;
+    font-weight: 700;
+    font-size: 0.6rem;
+    padding: 0.2rem 0.6rem;
     border-radius: 9999px;
     text-transform: uppercase;
-    letter-spacing: 0.05em;
+    letter-spacing: 0.08em;
+    box-shadow: 0 2px 8px hsl(45 100% 50% / 0.3);
   }
 
   /* Tool card hover effect */
