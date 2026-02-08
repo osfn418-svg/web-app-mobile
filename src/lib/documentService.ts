@@ -1,4 +1,5 @@
 import { readDocumentFileAsText } from "@/lib/readDocumentFile";
+import { supabase } from '@/integrations/supabase/client';
 
 const ANALYZE_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/analyze-document`;
 
@@ -22,11 +23,19 @@ export async function streamDocumentAnalysis({
   onError: (error: string) => void;
 }) {
   try {
+    // Get user session token
+    const { data: { session } } = await supabase.auth.getSession();
+    
+    if (!session?.access_token) {
+      onError('يجب تسجيل الدخول أولاً');
+      return;
+    }
+
     const response = await fetch(ANALYZE_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+        Authorization: `Bearer ${session.access_token}`,
       },
       body: JSON.stringify({ action, documentText, question, messages }),
     });
