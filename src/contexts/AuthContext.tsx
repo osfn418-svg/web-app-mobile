@@ -1,98 +1,207 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { User, authenticateUser, registerUser, initializeDatabase, db, getUserSubscription, getSubscriptionPlan } from '@/lib/database';
+import { supabase } from '@/integrations/supabase/client';
+import { User, Session } from '@supabase/supabase-js';
+import { toast } from 'sonner';
+
+interface Profile {
+  id: string;
+  user_id: string;
+  username: string;
+  full_name: string;
+  avatar_url: string | null;
+  is_banned: boolean;
+  ban_reason: string | null;
+  created_at: string;
+}
+
+interface UserRole {
+  role: 'admin' | 'user';
+}
 
 interface AuthContextType {
   user: User | null;
+  profile: Profile | null;
+  session: Session | null;
   isLoading: boolean;
+  isAdmin: boolean;
   isPro: boolean;
-  login: (email: string, password: string) => Promise<boolean>;
-  register: (data: { username: string; email: string; password: string; full_name: string }) => Promise<boolean>;
-  logout: () => void;
-  refreshSubscription: () => Promise<void>;
+  login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
+  register: (data: { email: string; password: string; username: string; full_name: string }) => Promise<{ success: boolean; error?: string }>;
+  logout: () => Promise<void>;
+  refreshProfile: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [session, setSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [isPro, setIsPro] = useState(false);
 
-  const checkSubscription = async (userId: number) => {
-    const subscription = await getUserSubscription(userId);
-    if (subscription) {
-      const plan = await getSubscriptionPlan(subscription.plan_id);
-      setIsPro(plan?.plan_name === 'Nexus Pro' || plan?.plan_name === 'للشركات');
-    } else {
-      setIsPro(false);
+  const fetchProfile = async (userId: string) => {
+    try {
+      const { data: profileData, error: profileError } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('user_id', userId)
+        .maybeSingle();
+
+      if (profileError) throw profileError;
+      
+      if (profileData) {
+        setProfile(profileData as Profile);
+        
+        // Check if user is banned
+        if (profileData.is_banned) {
+          await supabase.auth.signOut();
+          toast.error('تم حظر حسابك. السبب: ' + (profileData.ban_reason || 'غير محدد'));
+          return;
+        }
+      }
+
+      // Check user role
+      const { data: roleData } = await supabase
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', userId);
+
+      const roles = roleData as UserRole[] | null;
+      setIsAdmin(roles?.some(r => r.role === 'admin') || false);
+
+      // Check subscription
+      const { data: subscriptionData } = await supabase
+        .from('user_subscriptions')
+        .select('*, subscription_plans(*)')
+        .eq('user_id', userId)
+        .eq('status', 'active')
+        .gte('end_date', new Date().toISOString())
+        .maybeSingle();
+
+      setIsPro(!!subscriptionData);
+    } catch (error) {
+      console.error('Error fetching profile:', error);
     }
   };
 
-  const refreshSubscription = async () => {
-    if (user?.user_id) {
-      await checkSubscription(user.user_id);
+  const refreshProfile = async () => {
+    if (user?.id) {
+      await fetchProfile(user.id);
     }
   };
 
   useEffect(() => {
-    const init = async () => {
-      await initializeDatabase();
-      
-      // Check for stored session
-      const storedUserId = localStorage.getItem('nexus_user_id');
-      if (storedUserId) {
-        const userData = await db.users.get(parseInt(storedUserId));
-        if (userData && userData.is_active) {
-          setUser(userData);
-          await checkSubscription(userData.user_id!);
+    // Set up auth state listener FIRST
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, currentSession) => {
+        setSession(currentSession);
+        setUser(currentSession?.user ?? null);
+        
+        if (currentSession?.user) {
+          // Use setTimeout to avoid Supabase deadlock
+          setTimeout(() => {
+            fetchProfile(currentSession.user.id);
+          }, 0);
+        } else {
+          setProfile(null);
+          setIsAdmin(false);
+          setIsPro(false);
         }
+        
+        setIsLoading(false);
       }
+    );
+
+    // THEN check for existing session
+    supabase.auth.getSession().then(({ data: { session: existingSession } }) => {
+      setSession(existingSession);
+      setUser(existingSession?.user ?? null);
+      
+      if (existingSession?.user) {
+        fetchProfile(existingSession.user.id);
+      }
+      
       setIsLoading(false);
-    };
-    
-    init();
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
 
-  const login = async (email: string, password: string): Promise<boolean> => {
-    const userData = await authenticateUser(email, password);
-    if (userData) {
-      setUser(userData);
-      localStorage.setItem('nexus_user_id', String(userData.user_id));
-      await checkSubscription(userData.user_id!);
-      return true;
-    }
-    return false;
-  };
-
-  const register = async (data: { username: string; email: string; password: string; full_name: string }): Promise<boolean> => {
+  const login = async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
     try {
-      const userId = await registerUser({
-        username: data.username,
-        email: data.email,
-        password_hash: data.password,
-        full_name: data.full_name,
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
       });
-      
-      const userData = await db.users.get(userId);
-      if (userData) {
-        setUser(userData);
-        localStorage.setItem('nexus_user_id', String(userId));
-        return true;
+
+      if (error) {
+        return { success: false, error: error.message };
       }
+
+      if (data.user) {
+        await fetchProfile(data.user.id);
+        return { success: true };
+      }
+
+      return { success: false, error: 'خطأ غير متوقع' };
     } catch (error) {
-      console.error('Registration error:', error);
+      return { success: false, error: 'حدث خطأ أثناء تسجيل الدخول' };
     }
-    return false;
   };
 
-  const logout = () => {
+  const register = async (data: { email: string; password: string; username: string; full_name: string }): Promise<{ success: boolean; error?: string }> => {
+    try {
+      const { data: authData, error } = await supabase.auth.signUp({
+        email: data.email,
+        password: data.password,
+        options: {
+          emailRedirectTo: window.location.origin,
+          data: {
+            username: data.username,
+            full_name: data.full_name,
+          },
+        },
+      });
+
+      if (error) {
+        return { success: false, error: error.message };
+      }
+
+      if (authData.user) {
+        toast.success('تم إنشاء الحساب! يرجى التحقق من بريدك الإلكتروني.');
+        return { success: true };
+      }
+
+      return { success: false, error: 'خطأ غير متوقع' };
+    } catch (error) {
+      return { success: false, error: 'حدث خطأ أثناء التسجيل' };
+    }
+  };
+
+  const logout = async () => {
+    await supabase.auth.signOut();
     setUser(null);
+    setProfile(null);
+    setSession(null);
+    setIsAdmin(false);
     setIsPro(false);
-    localStorage.removeItem('nexus_user_id');
   };
 
   return (
-    <AuthContext.Provider value={{ user, isLoading, isPro, login, register, logout, refreshSubscription }}>
+    <AuthContext.Provider value={{ 
+      user, 
+      profile, 
+      session, 
+      isLoading, 
+      isAdmin, 
+      isPro, 
+      login, 
+      register, 
+      logout,
+      refreshProfile 
+    }}>
       {children}
     </AuthContext.Provider>
   );

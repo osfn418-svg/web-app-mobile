@@ -4,31 +4,26 @@ import {
   ArrowRight, 
   Send, 
   Copy, 
-  Download,
   Code,
-  Sparkles,
   Check
 } from 'lucide-react';
-import { Link, useParams } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
-import { db, AITool, saveChat } from '@/lib/database';
+import { streamChat } from '@/lib/chatService';
 import { toast } from 'sonner';
 
 interface Message {
   id: string;
   role: 'user' | 'assistant';
   content: string;
-  timestamp: Date;
   isCode?: boolean;
 }
 
 export default function CodeAssistantPage() {
-  const { toolId } = useParams();
-  const { user, isPro } = useAuth();
+  const { profile, isPro } = useAuth();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
-  const [tool, setTool] = useState<AITool | null>(null);
   const [language, setLanguage] = useState('javascript');
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -41,131 +36,71 @@ export default function CodeAssistantPage() {
   ];
 
   useEffect(() => {
-    const loadTool = async () => {
-      const tools = await db.ai_tools.toArray();
-      const foundTool = tools.find(t => t.tool_url === `/tools/${toolId}`);
-      if (foundTool) {
-        setTool(foundTool);
-        setMessages([{
-          id: '1',
-          role: 'assistant',
-          content: `مرحباً! 👨‍💻 أنا مساعد البرمجة. يمكنني مساعدتك في:\n\n• كتابة الأكواد\n• تصحيح الأخطاء\n• شرح المفاهيم البرمجية\n• تحسين الأداء\n\nكيف يمكنني مساعدتك اليوم؟`,
-          timestamp: new Date(),
-        }]);
-      }
-    };
-    loadTool();
-  }, [toolId, user]);
+    setMessages([{
+      id: '1',
+      role: 'assistant',
+      content: `مرحباً ${profile?.full_name || ''}! 👨‍💻 أنا مساعد البرمجة. يمكنني مساعدتك في:\n\n• كتابة الأكواد\n• تصحيح الأخطاء\n• شرح المفاهيم البرمجية\n• تحسين الأداء\n\nكيف يمكنني مساعدتك اليوم؟`,
+    }]);
+  }, [profile]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  const generateCodeResponse = async (userMessage: string): Promise<string> => {
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    
-    const codeExamples: Record<string, string> = {
-      javascript: `\`\`\`javascript
-// إليك الحل:
-function example() {
-  const data = [];
-  for (let i = 0; i < 10; i++) {
-    data.push({ id: i, value: Math.random() });
-  }
-  return data.filter(item => item.value > 0.5);
-}
-
-// استخدام الدالة
-const result = example();
-console.log(result);
-\`\`\``,
-      python: `\`\`\`python
-# إليك الحل:
-def example():
-    data = []
-    for i in range(10):
-        import random
-        data.append({'id': i, 'value': random.random()})
-    return [item for item in data if item['value'] > 0.5]
-
-# استخدام الدالة
-result = example()
-print(result)
-\`\`\``,
-      typescript: `\`\`\`typescript
-// إليك الحل:
-interface DataItem {
-  id: number;
-  value: number;
-}
-
-function example(): DataItem[] {
-  const data: DataItem[] = [];
-  for (let i = 0; i < 10; i++) {
-    data.push({ id: i, value: Math.random() });
-  }
-  return data.filter(item => item.value > 0.5);
-}
-
-// استخدام الدالة
-const result = example();
-console.log(result);
-\`\`\``,
-    };
-
-    return `بناءً على طلبك، إليك الحل:\n\n${codeExamples[language] || codeExamples.javascript}\n\n**شرح الكود:**\n- قمت بإنشاء دالة تقوم بالمهمة المطلوبة\n- تم استخدام أفضل الممارسات\n- الكود قابل للتوسيع والتعديل`;
-  };
-
   const handleSend = async () => {
     if (!input.trim() || loading) return;
-
-    if (tool?.requires_subscription && !isPro) {
-      toast.error('هذه الميزة متاحة فقط لمشتركي Pro');
-      return;
-    }
 
     const userMessage: Message = {
       id: Date.now().toString(),
       role: 'user',
-      content: input,
-      timestamp: new Date(),
+      content: `[لغة البرمجة: ${language}]\n${input}`,
     };
 
     setMessages(prev => [...prev, userMessage]);
     setInput('');
     setLoading(true);
 
+    let assistantContent = '';
+
+    const updateAssistant = (chunk: string) => {
+      assistantContent += chunk;
+      setMessages(prev => {
+        const last = prev[prev.length - 1];
+        if (last?.role === 'assistant' && last.id === 'streaming') {
+          return prev.map((m, i) => 
+            i === prev.length - 1 ? { ...m, content: assistantContent } : m
+          );
+        }
+        return [...prev, { id: 'streaming', role: 'assistant', content: assistantContent, isCode: true }];
+      });
+    };
+
     try {
-      const response = await generateCodeResponse(input);
-      
-      const assistantMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        role: 'assistant',
-        content: response,
-        timestamp: new Date(),
-        isCode: true,
-      };
-
-      setMessages(prev => [...prev, assistantMessage]);
-
-      if (user?.user_id && tool?.tool_id) {
-        await saveChat({
-          user_id: user.user_id,
-          tool_id: tool.tool_id,
-          user_message: input,
-          ai_response: response,
-          created_at: new Date(),
-        });
-      }
+      await streamChat({
+        messages: messages.filter(m => m.id !== '1').concat(userMessage).map(m => ({
+          role: m.role,
+          content: m.content
+        })),
+        toolType: 'code',
+        onDelta: updateAssistant,
+        onDone: () => {
+          setMessages(prev => 
+            prev.map(m => m.id === 'streaming' ? { ...m, id: Date.now().toString() } : m)
+          );
+          setLoading(false);
+        },
+        onError: (error) => {
+          toast.error(error);
+          setLoading(false);
+        }
+      });
     } catch (error) {
       toast.error('حدث خطأ أثناء معالجة الطلب');
-    } finally {
       setLoading(false);
     }
   };
 
   const handleCopy = (text: string, id: string) => {
-    // Extract code from markdown code blocks
     const codeMatch = text.match(/```[\s\S]*?\n([\s\S]*?)```/);
     const codeToCopy = codeMatch ? codeMatch[1].trim() : text;
     
@@ -176,7 +111,6 @@ console.log(result);
   };
 
   const formatMessage = (content: string) => {
-    // Simple markdown-like formatting for code blocks
     return content.split('```').map((part, index) => {
       if (index % 2 === 1) {
         const [lang, ...code] = part.split('\n');
@@ -205,14 +139,17 @@ console.log(result);
           </Link>
           <div className="flex items-center gap-3 flex-1">
             <div className="w-10 h-10 rounded-xl bg-muted flex items-center justify-center text-xl">
-              {tool?.logo_url || '💻'}
+              💻
             </div>
             <div>
-              <h1 className="font-semibold text-foreground">{tool?.tool_name || 'محرر الأكواد'}</h1>
-              <p className="text-xs text-muted-foreground">بناء وتصحيح البرمجيات</p>
+              <h1 className="font-semibold text-foreground">محرر الأكواد</h1>
+              <p className="text-xs text-success flex items-center gap-1">
+                <span className="w-2 h-2 bg-success rounded-full pulse-dot"></span>
+                متصل بـ AI حقيقي
+              </p>
             </div>
           </div>
-          {tool?.requires_subscription && <span className="pro-badge">PRO</span>}
+          <span className="pro-badge">PRO</span>
         </div>
         
         {/* Language Selector */}
@@ -253,7 +190,7 @@ console.log(result);
             >
               <div className="text-sm">{formatMessage(message.content)}</div>
 
-              {message.role === 'assistant' && message.isCode && (
+              {message.role === 'assistant' && message.isCode && message.id !== '1' && message.id !== 'streaming' && (
                 <div className="flex gap-2 mt-3 pt-3 border-t border-border">
                   <button
                     onClick={() => handleCopy(message.content, message.id)}
@@ -272,7 +209,7 @@ console.log(result);
           </motion.div>
         ))}
 
-        {loading && (
+        {loading && messages[messages.length - 1]?.role !== 'assistant' && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -301,6 +238,7 @@ console.log(result);
               onKeyPress={(e) => e.key === 'Enter' && handleSend()}
               placeholder="اكتب سؤالك البرمجي هنا..."
               className="w-full px-4 py-3 bg-muted border border-border rounded-xl text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary transition-colors"
+              disabled={loading}
             />
           </div>
           <motion.button

@@ -1,35 +1,17 @@
-import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { ChevronLeft, Clock, FileText, Video } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import MobileLayout from '@/components/layout/MobileLayout';
 import ToolCard from '@/components/cards/ToolCard';
 import { useAuth } from '@/contexts/AuthContext';
-import { AITool, getAllTools, ChatConversation, getChatHistory, db, Category } from '@/lib/database';
+import { useAITools, useCategories } from '@/hooks/useRealtimeData';
+import { useState } from 'react';
 
 export default function HomePage() {
-  const { user, isPro } = useAuth();
-  const [tools, setTools] = useState<AITool[]>([]);
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [selectedCategory, setSelectedCategory] = useState<number | null>(null);
-  const [recentActivity, setRecentActivity] = useState<ChatConversation[]>([]);
-
-  useEffect(() => {
-    const loadData = async () => {
-      const [allTools, allCategories] = await Promise.all([
-        getAllTools(),
-        db.categories.toArray()
-      ]);
-      setTools(allTools);
-      setCategories(allCategories);
-
-      if (user?.user_id) {
-        const history = await getChatHistory(user.user_id);
-        setRecentActivity(history.slice(-3).reverse());
-      }
-    };
-    loadData();
-  }, [user]);
+  const { profile, isPro } = useAuth();
+  const { data: tools, loading: toolsLoading } = useAITools();
+  const { data: categories } = useCategories();
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
 
   const filteredTools = selectedCategory === null 
     ? tools 
@@ -47,7 +29,7 @@ export default function HomePage() {
           <div>
             <p className="text-muted-foreground text-sm">مرحباً بك 👋</p>
             <h1 className="text-2xl font-bold text-foreground">
-              {user?.full_name || 'زائر'}
+              {profile?.full_name || 'زائر'}
             </h1>
           </div>
           <div className="flex items-center gap-2">
@@ -115,43 +97,62 @@ export default function HomePage() {
             >
               الكل
             </button>
-            {categories.map((category) => (
+            {categories.map((category: any) => (
               <button
-                key={category.category_id}
-                onClick={() => setSelectedCategory(category.category_id!)}
+                key={category.id}
+                onClick={() => setSelectedCategory(category.id)}
                 className={`px-4 py-2 rounded-full text-sm whitespace-nowrap transition-colors ${
-                  selectedCategory === category.category_id
+                  selectedCategory === category.id
                     ? 'bg-primary text-primary-foreground'
                     : 'bg-muted text-muted-foreground hover:bg-muted/80'
                 }`}
               >
-                {category.category_name}
+                {category.icon} {category.name}
               </button>
             ))}
           </div>
 
           {/* Tools grid */}
-          <div className="grid grid-cols-2 gap-3">
-            {filteredTools.slice(0, 6).map((tool, index) => (
-              <motion.div
-                key={tool.tool_id}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.1 * index }}
-              >
-                <ToolCard tool={tool} />
-              </motion.div>
-            ))}
-          </div>
+          {toolsLoading ? (
+            <div className="grid grid-cols-2 gap-3">
+              {[1,2,3,4].map(i => (
+                <div key={i} className="glass-card rounded-xl p-4 h-32 animate-pulse bg-muted" />
+              ))}
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-3">
+              {filteredTools.slice(0, 6).map((tool: any, index: number) => (
+                <motion.div
+                  key={tool.id}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.1 * index }}
+                >
+                  <ToolCard tool={{
+                    tool_id: tool.id,
+                    tool_name: tool.name,
+                    tool_description: tool.description,
+                    tool_url: tool.url,
+                    logo_url: tool.logo_url,
+                    requires_subscription: tool.requires_subscription,
+                    rating: tool.rating,
+                    category_id: 0,
+                    added_by_admin: 0,
+                    approved: true
+                  }} />
+                </motion.div>
+              ))}
+            </div>
+          )}
           
-          {filteredTools.length === 0 && (
+          {filteredTools.length === 0 && !toolsLoading && (
             <div className="text-center py-8">
               <p className="text-muted-foreground">لا توجد أدوات في هذه الفئة</p>
             </div>
           )}
         </motion.div>
 
-        {/* Recent Activity */}
+        {/* Recent Activity Placeholder */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -163,59 +164,20 @@ export default function HomePage() {
           </div>
 
           <div className="space-y-3">
-            {recentActivity.length > 0 ? (
-              recentActivity.map((activity) => (
-                <div key={activity.conversation_id} className="glass-card rounded-xl p-4">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center">
-                      <FileText className="w-5 h-5 text-primary" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm text-foreground truncate">
-                        {activity.user_message.slice(0, 40)}...
-                      </p>
-                      <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                        <Clock className="w-3 h-3" />
-                        <span>
-                          {new Date(activity.created_at).toLocaleDateString('ar')}
-                        </span>
-                      </div>
-                    </div>
+            <div className="glass-card rounded-xl p-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center">
+                  <Video className="w-5 h-5 text-primary" />
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm text-foreground">ابدأ باستخدام الأدوات</p>
+                  <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                    <Clock className="w-3 h-3" />
+                    <span>جاهز للاستخدام</span>
                   </div>
                 </div>
-              ))
-            ) : (
-              <>
-                <div className="glass-card rounded-xl p-4">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center">
-                      <Video className="w-5 h-5 text-primary" />
-                    </div>
-                    <div className="flex-1">
-                      <p className="text-sm text-foreground">إعلان تسويقي للعيد.mp4</p>
-                      <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                        <Clock className="w-3 h-3" />
-                        <span>تم التوليد • منذ 15 دقيقة</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                <div className="glass-card rounded-xl p-4">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center">
-                      <FileText className="w-5 h-5 text-secondary" />
-                    </div>
-                    <div className="flex-1">
-                      <p className="text-sm text-foreground">مشروع تحليل البيانات.pdf</p>
-                      <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                        <Clock className="w-3 h-3" />
-                        <span>تم التحليل • قبل ساعتين</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </>
-            )}
+              </div>
+            </div>
           </div>
         </motion.div>
       </div>

@@ -1,472 +1,658 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
+  ArrowRight, 
   Users, 
-  DollarSign, 
-  TrendingUp, 
-  Search,
+  Settings, 
+  Plus,
+  Edit2,
+  Trash2,
+  Ban,
+  CheckCircle,
   Crown,
-  Settings,
-  FileText,
-  Home,
-  ArrowRight,
   X,
-  Check,
-  Star
+  Package,
+  CreditCard,
+  Layers
 } from 'lucide-react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { db, User, AITool, SubscriptionPlan, UserSubscription } from '@/lib/database';
+import { Link } from 'react-router-dom';
+import { useAuth } from '@/contexts/AuthContext';
+import { useAdminTools, useAdminPlans, useAdminCategories, useAllProfiles } from '@/hooks/useRealtimeData';
+import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
+type Tab = 'users' | 'tools' | 'plans' | 'categories';
+
 export default function AdminDashboard() {
-  const location = useLocation();
-  const navigate = useNavigate();
-  const [users, setUsers] = useState<User[]>([]);
-  const [tools, setTools] = useState<AITool[]>([]);
-  const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
-  const [subscriptions, setSubscriptions] = useState<UserSubscription[]>([]);
-  const [activeTab, setActiveTab] = useState<'users' | 'tools' | 'subscriptions'>('users');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedUser, setSelectedUser] = useState<User | null>(null);
-  const [showPlanModal, setShowPlanModal] = useState(false);
-
-  useEffect(() => {
-    loadData();
-  }, []);
-
-  const loadData = async () => {
-    const [allUsers, allTools, allPlans, allSubs] = await Promise.all([
-      db.users.toArray(),
-      db.ai_tools.toArray(),
-      db.subscription_plans.toArray(),
-      db.user_subscriptions.toArray(),
-    ]);
-    setUsers(allUsers);
-    setTools(allTools);
-    setPlans(allPlans);
-    setSubscriptions(allSubs);
-  };
-
-  const getUserPlan = (userId: number) => {
-    const sub = subscriptions.find(s => s.user_id === userId && s.payment_status === 'active');
-    if (!sub) return null;
-    return plans.find(p => p.plan_id === sub.plan_id);
-  };
-
-  const handleGrantSubscription = async (planId: number) => {
-    if (!selectedUser) return;
-    
-    try {
-      // Remove existing active subscriptions
-      const existingSubs = await db.user_subscriptions
-        .where('user_id')
-        .equals(selectedUser.user_id!)
-        .toArray();
-      
-      for (const sub of existingSubs) {
-        await db.user_subscriptions.update(sub.subscription_id!, { payment_status: 'expired' });
-      }
-
-      // Add new subscription
-      const plan = plans.find(p => p.plan_id === planId);
-      if (plan && plan.plan_duration > 0) {
-        const startDate = new Date();
-        const endDate = new Date();
-        endDate.setDate(endDate.getDate() + plan.plan_duration);
-
-        await db.user_subscriptions.add({
-          user_id: selectedUser.user_id!,
-          plan_id: planId,
-          start_date: startDate,
-          end_date: endDate,
-          payment_status: 'active',
-        });
-      }
-
-      await loadData();
-      setShowPlanModal(false);
-      setSelectedUser(null);
-      toast.success(`تم منح اشتراك ${plan?.plan_name} بنجاح`);
-    } catch (error) {
-      toast.error('حدث خطأ أثناء منح الاشتراك');
-    }
-  };
-
-  const handleToggleToolStatus = async (toolId: number, currentStatus: boolean) => {
-    await db.ai_tools.update(toolId, { approved: !currentStatus });
-    await loadData();
-    toast.success(currentStatus ? 'تم إيقاف الأداة' : 'تم تفعيل الأداة');
-  };
-
-  const filteredUsers = users.filter(user =>
-    user.full_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    user.email.toLowerCase().includes(searchQuery.toLowerCase())
-  );
-
-  const filteredTools = tools.filter(tool =>
-    tool.tool_name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
-
-  const stats = [
-    { 
-      label: 'إجمالي المستخدمين', 
-      value: users.length.toString(), 
-      change: '+5 هذا الأسبوع', 
-      icon: Users,
-      color: 'text-primary'
-    },
-    { 
-      label: 'المشتركين Pro', 
-      value: subscriptions.filter(s => s.payment_status === 'active').length.toString(), 
-      change: 'مشتركين نشطين', 
-      icon: Crown,
-      color: 'text-warning'
-    },
-  ];
-
-  const navItems = [
-    { icon: ArrowRight, label: 'رجوع', path: '/home' },
-    { icon: Home, label: 'الرئيسية', path: '/admin' },
-    { icon: Users, label: 'المستخدمين', path: '/admin/users' },
-    { icon: Settings, label: 'الإعدادات', path: '/admin/settings' },
+  const { profile } = useAuth();
+  const [activeTab, setActiveTab] = useState<Tab>('users');
+  
+  const tabs = [
+    { id: 'users' as Tab, label: 'المستخدمين', icon: Users },
+    { id: 'tools' as Tab, label: 'الأدوات', icon: Package },
+    { id: 'plans' as Tab, label: 'الخطط', icon: CreditCard },
+    { id: 'categories' as Tab, label: 'الفئات', icon: Layers },
   ];
 
   return (
-    <div className="app-container bg-background min-h-screen" dir="rtl">
-      <div className="px-4 py-6 pb-24 space-y-6">
-        {/* Header */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="flex items-center justify-between"
-        >
-          <div>
-            <h1 className="text-2xl font-bold text-foreground">لوحة التحكم</h1>
-            <p className="text-muted-foreground">مرحباً، المسؤول 👋</p>
-          </div>
-          <Link to="/home" className="p-2 hover:bg-muted rounded-xl transition-colors">
+    <div className="min-h-screen bg-background" dir="rtl">
+      {/* Header */}
+      <header className="glass sticky top-0 z-40 px-4 py-4 safe-top">
+        <div className="flex items-center gap-3">
+          <Link to="/profile" className="p-2 hover:bg-muted rounded-xl transition-colors">
             <ArrowRight className="w-5 h-5 text-foreground" />
           </Link>
-        </motion.div>
-
-        {/* Stats */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-          className="grid grid-cols-2 gap-4"
-        >
-          {stats.map((stat) => (
-            <div key={stat.label} className="glass-card rounded-2xl p-4">
-              <div className="flex items-center justify-between mb-2">
-                <stat.icon className={`w-5 h-5 ${stat.color}`} />
-                <TrendingUp className="w-4 h-4 text-success" />
-              </div>
-              <p className="text-2xl font-bold text-foreground">{stat.value}</p>
-              <p className="text-xs text-muted-foreground">{stat.label}</p>
-              <p className="text-xs text-success mt-1">{stat.change}</p>
-            </div>
-          ))}
-        </motion.div>
-
-        {/* Tabs */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2 }}
-          className="flex gap-2"
-        >
-          <button
-            onClick={() => { setActiveTab('users'); setSearchQuery(''); }}
-            className={`flex-1 py-3 rounded-xl text-sm font-medium transition-colors ${
-              activeTab === 'users'
-                ? 'bg-primary text-primary-foreground'
-                : 'bg-muted text-muted-foreground'
-            }`}
-          >
-            المستخدمين
-          </button>
-          <button
-            onClick={() => { setActiveTab('tools'); setSearchQuery(''); }}
-            className={`flex-1 py-3 rounded-xl text-sm font-medium transition-colors ${
-              activeTab === 'tools'
-                ? 'bg-primary text-primary-foreground'
-                : 'bg-muted text-muted-foreground'
-            }`}
-          >
-            الأدوات
-          </button>
-          <button
-            onClick={() => { setActiveTab('subscriptions'); setSearchQuery(''); }}
-            className={`flex-1 py-3 rounded-xl text-sm font-medium transition-colors ${
-              activeTab === 'subscriptions'
-                ? 'bg-primary text-primary-foreground'
-                : 'bg-muted text-muted-foreground'
-            }`}
-          >
-            الاشتراكات
-          </button>
-        </motion.div>
-
-        {/* Search */}
-        <div className="relative">
-          <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-          <input
-            type="text"
-            placeholder={activeTab === 'users' ? 'ابحث عن مستخدم...' : activeTab === 'tools' ? 'ابحث عن أداة...' : 'ابحث...'}
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pr-10 pl-4 py-3 bg-muted border border-border rounded-xl text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary transition-colors"
-          />
+          <div className="flex-1">
+            <h1 className="text-xl font-bold text-foreground">لوحة التحكم</h1>
+            <p className="text-xs text-muted-foreground">مرحباً {profile?.full_name}</p>
+          </div>
+          <Settings className="w-5 h-5 text-muted-foreground" />
         </div>
 
-        {/* Users Tab */}
-        {activeTab === 'users' && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="space-y-3"
-          >
-            {filteredUsers.map((user, index) => {
-              const userPlan = getUserPlan(user.user_id!);
-              return (
-                <motion.div
-                  key={user.user_id}
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: 0.05 * index }}
-                  className="glass-card rounded-xl p-4"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center text-lg font-bold text-primary-foreground">
-                      {user.full_name.charAt(0)}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <p className="font-medium text-foreground">{user.full_name}</p>
-                        {user.role === 'admin' && (
-                          <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-gradient-pro text-primary-foreground">
-                            Admin
-                          </span>
-                        )}
-                        {userPlan && (
-                          <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-warning/20 text-warning">
-                            {userPlan.plan_name}
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-sm text-muted-foreground truncate">{user.email}</p>
-                    </div>
-                    <button 
-                      onClick={() => { setSelectedUser(user); setShowPlanModal(true); }}
-                      className="px-3 py-2 bg-primary/20 text-primary rounded-lg text-xs font-medium hover:bg-primary/30 transition-colors"
-                    >
-                      منح اشتراك
-                    </button>
-                  </div>
-                </motion.div>
-              );
-            })}
-          </motion.div>
-        )}
+        {/* Tabs */}
+        <div className="flex gap-2 mt-4 overflow-x-auto pb-2 scrollbar-hide">
+          {tabs.map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`px-4 py-2 rounded-xl text-sm whitespace-nowrap transition-colors flex items-center gap-2 ${
+                activeTab === tab.id
+                  ? 'bg-primary text-primary-foreground'
+                  : 'bg-muted text-muted-foreground hover:bg-muted/80'
+              }`}
+            >
+              <tab.icon className="w-4 h-4" />
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      </header>
 
-        {/* Tools Tab */}
-        {activeTab === 'tools' && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="space-y-3"
-          >
-            <div className="glass-card rounded-xl p-4">
-              <div className="flex items-center justify-between">
-                <p className="text-sm text-muted-foreground">إجمالي الأدوات: <span className="text-foreground font-bold">{tools.length}</span></p>
-                <div className="flex items-center gap-4 text-xs">
-                  <span className="text-success">نشطة: {tools.filter(t => t.approved).length}</span>
-                  <span className="text-destructive">معطلة: {tools.filter(t => !t.approved).length}</span>
-                </div>
-              </div>
-            </div>
+      {/* Content */}
+      <main className="px-4 py-6">
+        <AnimatePresence mode="wait">
+          {activeTab === 'users' && <UsersTab key="users" />}
+          {activeTab === 'tools' && <ToolsTab key="tools" />}
+          {activeTab === 'plans' && <PlansTab key="plans" />}
+          {activeTab === 'categories' && <CategoriesTab key="categories" />}
+        </AnimatePresence>
+      </main>
+    </div>
+  );
+}
 
-            {filteredTools.map((tool, index) => (
-              <motion.div
-                key={tool.tool_id}
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: 0.05 * index }}
-                className="glass-card rounded-xl p-4"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 rounded-xl bg-muted flex items-center justify-center text-2xl">
-                    {tool.logo_url}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <p className="font-medium text-foreground">{tool.tool_name}</p>
-                      {tool.requires_subscription && (
-                        <span className="pro-badge">PRO</span>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2 mt-1">
-                      <Star className="w-3 h-3 text-warning fill-warning" />
-                      <span className="text-xs text-muted-foreground">{tool.rating}</span>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => handleToggleToolStatus(tool.tool_id!, tool.approved)}
-                    className={`px-3 py-2 rounded-lg text-xs font-medium transition-colors ${
-                      tool.approved 
-                        ? 'bg-destructive/20 text-destructive hover:bg-destructive/30' 
-                        : 'bg-success/20 text-success hover:bg-success/30'
-                    }`}
-                  >
-                    {tool.approved ? 'إيقاف' : 'تفعيل'}
-                  </button>
-                </div>
-              </motion.div>
-            ))}
-          </motion.div>
-        )}
+// Users Tab
+function UsersTab() {
+  const { data: users, loading, refetch } = useAllProfiles();
+  const { data: plans } = useAdminPlans();
+  const [selectedUser, setSelectedUser] = useState<any>(null);
+  const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
+  const [showBanModal, setShowBanModal] = useState(false);
+  const [banReason, setBanReason] = useState('');
+  const [selectedPlan, setSelectedPlan] = useState('');
+  const [duration, setDuration] = useState(30);
 
-        {/* Subscriptions Tab */}
-        {activeTab === 'subscriptions' && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="space-y-4"
-          >
-            <h3 className="text-lg font-semibold text-foreground">خطط الاشتراك</h3>
-            {plans.map((plan, index) => {
-              const activeCount = subscriptions.filter(s => s.plan_id === plan.plan_id && s.payment_status === 'active').length;
-              return (
-                <motion.div
-                  key={plan.plan_id}
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.1 * index }}
-                  className="glass-card rounded-xl p-5"
-                >
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-3">
-                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
-                        plan.plan_name === 'مجاني' ? 'bg-muted' : 'bg-gradient-pro'
-                      }`}>
-                        <Crown className={`w-5 h-5 ${plan.plan_name === 'مجاني' ? 'text-muted-foreground' : 'text-primary-foreground'}`} />
-                      </div>
-                      <div>
-                        <h4 className="font-semibold text-foreground">{plan.plan_name}</h4>
-                        <p className="text-sm text-muted-foreground">
-                          {plan.price === 0 ? 'مجاني' : `$${plan.price}/${plan.plan_duration} يوم`}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="text-left">
-                      <p className="text-2xl font-bold text-foreground">{activeCount}</p>
-                      <p className="text-xs text-muted-foreground">مشترك</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <Check className="w-4 h-4 text-success" />
-                    <span>{plan.max_tools_access === -1 ? 'وصول غير محدود' : `${plan.max_tools_access} أدوات`}</span>
-                  </div>
-                </motion.div>
-              );
-            })}
-          </motion.div>
-        )}
+  const handleBan = async () => {
+    if (!selectedUser) return;
+    
+    const { error } = await supabase
+      .from('profiles')
+      .update({ is_banned: true, ban_reason: banReason })
+      .eq('id', selectedUser.id);
+
+    if (error) {
+      toast.error('فشل في حظر المستخدم');
+    } else {
+      toast.success('تم حظر المستخدم');
+      setShowBanModal(false);
+      setBanReason('');
+      refetch();
+    }
+  };
+
+  const handleUnban = async (userId: string) => {
+    const { error } = await supabase
+      .from('profiles')
+      .update({ is_banned: false, ban_reason: null })
+      .eq('id', userId);
+
+    if (error) {
+      toast.error('فشل في رفع الحظر');
+    } else {
+      toast.success('تم رفع الحظر');
+      refetch();
+    }
+  };
+
+  const handleGrantSubscription = async () => {
+    if (!selectedUser || !selectedPlan) return;
+
+    const endDate = new Date();
+    endDate.setDate(endDate.getDate() + duration);
+
+    const { error } = await supabase
+      .from('user_subscriptions')
+      .insert({
+        user_id: selectedUser.user_id,
+        plan_id: selectedPlan,
+        end_date: endDate.toISOString(),
+        status: 'active'
+      });
+
+    if (error) {
+      toast.error('فشل في منح الاشتراك');
+    } else {
+      toast.success('تم منح الاشتراك بنجاح');
+      setShowSubscriptionModal(false);
+      setSelectedPlan('');
+      refetch();
+    }
+  };
+
+  if (loading) {
+    return <div className="text-center py-8 text-muted-foreground">جاري التحميل...</div>;
+  }
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -20 }}
+      className="space-y-4"
+    >
+      <div className="flex items-center justify-between">
+        <h2 className="text-lg font-semibold text-foreground">
+          المستخدمين ({users.length})
+        </h2>
       </div>
 
-      {/* Plan Selection Modal */}
-      <AnimatePresence>
-        {showPlanModal && selectedUser && (
-          <>
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => { setShowPlanModal(false); setSelectedUser(null); }}
-              className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50"
-            />
-            <motion.div
-              initial={{ opacity: 0, y: 100 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 100 }}
-              className="fixed bottom-0 left-0 right-0 z-50 max-w-[430px] mx-auto"
-            >
-              <div className="bg-card border-t border-border rounded-t-3xl p-6 pb-10">
-                <div className="flex items-center justify-between mb-6">
-                  <div>
-                    <h3 className="text-lg font-bold text-foreground">منح اشتراك</h3>
-                    <p className="text-sm text-muted-foreground">{selectedUser.full_name}</p>
-                  </div>
-                  <button
-                    onClick={() => { setShowPlanModal(false); setSelectedUser(null); }}
-                    className="p-2 hover:bg-muted rounded-full transition-colors"
-                  >
-                    <X className="w-5 h-5 text-muted-foreground" />
-                  </button>
-                </div>
-
-                <div className="space-y-3">
-                  {plans.filter(p => p.price > 0).map((plan) => (
-                    <button
-                      key={plan.plan_id}
-                      onClick={() => handleGrantSubscription(plan.plan_id!)}
-                      className="w-full glass-card rounded-xl p-4 flex items-center gap-4 hover:bg-muted/50 transition-colors text-right"
-                    >
-                      <div className="w-12 h-12 rounded-xl bg-gradient-pro flex items-center justify-center">
-                        <Crown className="w-6 h-6 text-primary-foreground" />
-                      </div>
-                      <div className="flex-1">
-                        <h4 className="font-semibold text-foreground">{plan.plan_name}</h4>
-                        <p className="text-sm text-muted-foreground">${plan.price} / {plan.plan_duration} يوم</p>
-                      </div>
-                      <Check className="w-5 h-5 text-success" />
-                    </button>
-                  ))}
-                </div>
+      <div className="space-y-3">
+        {users.map((user: any) => (
+          <div key={user.id} className="glass-card rounded-xl p-4">
+            <div className="flex items-center gap-3">
+              <div className={`w-12 h-12 rounded-full flex items-center justify-center text-lg font-bold ${
+                user.is_banned ? 'bg-destructive/20 text-destructive' : 'bg-primary/20 text-primary'
+              }`}>
+                {user.full_name?.charAt(0) || '?'}
               </div>
-            </motion.div>
-          </>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <p className="font-medium text-foreground truncate">{user.full_name}</p>
+                  {user.user_roles?.some((r: any) => r.role === 'admin') && (
+                    <span className="px-2 py-0.5 bg-destructive text-destructive-foreground text-xs rounded-full">أدمن</span>
+                  )}
+                  {user.is_banned && (
+                    <span className="px-2 py-0.5 bg-destructive/20 text-destructive text-xs rounded-full">محظور</span>
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground">@{user.username}</p>
+                {user.user_subscriptions?.[0] && (
+                  <p className="text-xs text-success mt-1">
+                    {user.user_subscriptions[0].subscription_plans?.name} - نشط
+                  </p>
+                )}
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => { setSelectedUser(user); setShowSubscriptionModal(true); }}
+                  className="p-2 hover:bg-primary/20 rounded-lg transition-colors"
+                  title="منح اشتراك"
+                >
+                  <Crown className="w-4 h-4 text-primary" />
+                </button>
+                {user.is_banned ? (
+                  <button
+                    onClick={() => handleUnban(user.id)}
+                    className="p-2 hover:bg-success/20 rounded-lg transition-colors"
+                    title="رفع الحظر"
+                  >
+                    <CheckCircle className="w-4 h-4 text-success" />
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => { setSelectedUser(user); setShowBanModal(true); }}
+                    className="p-2 hover:bg-destructive/20 rounded-lg transition-colors"
+                    title="حظر"
+                  >
+                    <Ban className="w-4 h-4 text-destructive" />
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Subscription Modal */}
+      <AnimatePresence>
+        {showSubscriptionModal && (
+          <Modal onClose={() => setShowSubscriptionModal(false)} title="منح اشتراك">
+            <div className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                منح اشتراك لـ: <strong>{selectedUser?.full_name}</strong>
+              </p>
+              <div>
+                <label className="text-sm text-muted-foreground">الخطة</label>
+                <select
+                  value={selectedPlan}
+                  onChange={(e) => setSelectedPlan(e.target.value)}
+                  className="w-full mt-1 p-3 bg-muted border border-border rounded-xl text-foreground"
+                >
+                  <option value="">اختر خطة</option>
+                  {plans.filter((p: any) => p.price > 0).map((plan: any) => (
+                    <option key={plan.id} value={plan.id}>{plan.name} - ${plan.price}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="text-sm text-muted-foreground">المدة (أيام)</label>
+                <input
+                  type="number"
+                  value={duration}
+                  onChange={(e) => setDuration(parseInt(e.target.value))}
+                  className="w-full mt-1 p-3 bg-muted border border-border rounded-xl text-foreground"
+                />
+              </div>
+              <button
+                onClick={handleGrantSubscription}
+                disabled={!selectedPlan}
+                className="w-full py-3 bg-primary text-primary-foreground rounded-xl font-medium disabled:opacity-50"
+              >
+                منح الاشتراك
+              </button>
+            </div>
+          </Modal>
         )}
       </AnimatePresence>
 
-      {/* Admin Bottom Nav */}
-      <nav className="bottom-nav safe-bottom">
-        <div className="flex items-center justify-around">
-          {navItems.map((item) => {
-            const isActive = location.pathname === item.path;
-            const Icon = item.icon;
-
-            return (
-              <Link
-                key={item.path}
-                to={item.path}
-                className="relative flex flex-col items-center gap-1 py-2 px-4"
-              >
-                {isActive && (
-                  <motion.div
-                    layoutId="adminNavIndicator"
-                    className="absolute -top-1 w-8 h-1 rounded-full bg-primary"
-                    transition={{ type: 'spring', stiffness: 500, damping: 30 }}
-                  />
-                )}
-                <Icon
-                  className={`w-5 h-5 transition-colors ${
-                    isActive ? 'text-primary' : 'text-muted-foreground'
-                  }`}
+      {/* Ban Modal */}
+      <AnimatePresence>
+        {showBanModal && (
+          <Modal onClose={() => setShowBanModal(false)} title="حظر مستخدم">
+            <div className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                حظر المستخدم: <strong>{selectedUser?.full_name}</strong>
+              </p>
+              <div>
+                <label className="text-sm text-muted-foreground">سبب الحظر</label>
+                <textarea
+                  value={banReason}
+                  onChange={(e) => setBanReason(e.target.value)}
+                  placeholder="أدخل سبب الحظر..."
+                  className="w-full mt-1 p-3 bg-muted border border-border rounded-xl text-foreground min-h-[100px]"
                 />
-                <span
-                  className={`text-xs transition-colors ${
-                    isActive ? 'text-primary font-medium' : 'text-muted-foreground'
-                  }`}
-                >
-                  {item.label}
-                </span>
-              </Link>
-            );
-          })}
+              </div>
+              <button
+                onClick={handleBan}
+                className="w-full py-3 bg-destructive text-destructive-foreground rounded-xl font-medium"
+              >
+                تأكيد الحظر
+              </button>
+            </div>
+          </Modal>
+        )}
+      </AnimatePresence>
+    </motion.div>
+  );
+}
+
+// Tools Tab
+function ToolsTab() {
+  const { data: tools, loading, refetch } = useAdminTools();
+  const { data: categories } = useAdminCategories();
+  const [showModal, setShowModal] = useState(false);
+  const [editingTool, setEditingTool] = useState<any>(null);
+  const [form, setForm] = useState({
+    name: '',
+    description: '',
+    url: '',
+    category_id: '',
+    logo_url: '',
+    requires_subscription: false
+  });
+
+  const resetForm = () => {
+    setForm({ name: '', description: '', url: '', category_id: '', logo_url: '', requires_subscription: false });
+    setEditingTool(null);
+  };
+
+  const handleSubmit = async () => {
+    if (!form.name || !form.url) {
+      toast.error('يرجى ملء الحقول المطلوبة');
+      return;
+    }
+
+    if (editingTool) {
+      const { error } = await supabase
+        .from('ai_tools')
+        .update(form)
+        .eq('id', editingTool.id);
+
+      if (error) toast.error('فشل في التحديث');
+      else { toast.success('تم التحديث'); setShowModal(false); resetForm(); refetch(); }
+    } else {
+      const { error } = await supabase
+        .from('ai_tools')
+        .insert({ ...form, is_approved: true, is_active: true });
+
+      if (error) toast.error('فشل في الإضافة');
+      else { toast.success('تمت الإضافة'); setShowModal(false); resetForm(); refetch(); }
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('هل أنت متأكد من الحذف؟')) return;
+    const { error } = await supabase.from('ai_tools').delete().eq('id', id);
+    if (error) toast.error('فشل في الحذف');
+    else { toast.success('تم الحذف'); refetch(); }
+  };
+
+  const handleToggleActive = async (id: string, current: boolean) => {
+    const { error } = await supabase.from('ai_tools').update({ is_active: !current }).eq('id', id);
+    if (error) toast.error('فشل في التحديث');
+    else refetch();
+  };
+
+  const openEdit = (tool: any) => {
+    setEditingTool(tool);
+    setForm({
+      name: tool.name,
+      description: tool.description,
+      url: tool.url,
+      category_id: tool.category_id || '',
+      logo_url: tool.logo_url || '',
+      requires_subscription: tool.requires_subscription
+    });
+    setShowModal(true);
+  };
+
+  if (loading) return <div className="text-center py-8 text-muted-foreground">جاري التحميل...</div>;
+
+  return (
+    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h2 className="text-lg font-semibold text-foreground">الأدوات ({tools.length})</h2>
+        <button onClick={() => { resetForm(); setShowModal(true); }} className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-xl text-sm">
+          <Plus className="w-4 h-4" /> إضافة
+        </button>
+      </div>
+
+      <div className="space-y-3">
+        {tools.map((tool: any) => (
+          <div key={tool.id} className={`glass-card rounded-xl p-4 ${!tool.is_active ? 'opacity-50' : ''}`}>
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-xl bg-muted flex items-center justify-center text-2xl">{tool.logo_url || '🔧'}</div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <p className="font-medium text-foreground">{tool.name}</p>
+                  {tool.requires_subscription && <span className="pro-badge text-xs">PRO</span>}
+                  {!tool.is_active && <span className="px-2 py-0.5 bg-muted text-muted-foreground text-xs rounded-full">معطل</span>}
+                </div>
+                <p className="text-xs text-muted-foreground truncate">{tool.description}</p>
+              </div>
+              <div className="flex gap-2">
+                <button onClick={() => openEdit(tool)} className="p-2 hover:bg-muted rounded-lg"><Edit2 className="w-4 h-4 text-muted-foreground" /></button>
+                <button onClick={() => handleToggleActive(tool.id, tool.is_active)} className="p-2 hover:bg-muted rounded-lg">
+                  {tool.is_active ? <Ban className="w-4 h-4 text-orange-500" /> : <CheckCircle className="w-4 h-4 text-success" />}
+                </button>
+                <button onClick={() => handleDelete(tool.id)} className="p-2 hover:bg-destructive/20 rounded-lg"><Trash2 className="w-4 h-4 text-destructive" /></button>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <AnimatePresence>
+        {showModal && (
+          <Modal onClose={() => { setShowModal(false); resetForm(); }} title={editingTool ? 'تعديل أداة' : 'إضافة أداة'}>
+            <div className="space-y-4">
+              <input value={form.name} onChange={(e) => setForm(f => ({ ...f, name: e.target.value }))} placeholder="اسم الأداة *" className="w-full p-3 bg-muted border border-border rounded-xl text-foreground" />
+              <textarea value={form.description} onChange={(e) => setForm(f => ({ ...f, description: e.target.value }))} placeholder="الوصف" className="w-full p-3 bg-muted border border-border rounded-xl text-foreground min-h-[80px]" />
+              <input value={form.url} onChange={(e) => setForm(f => ({ ...f, url: e.target.value }))} placeholder="الرابط (مثل /tools/my-tool) *" className="w-full p-3 bg-muted border border-border rounded-xl text-foreground" />
+              <input value={form.logo_url} onChange={(e) => setForm(f => ({ ...f, logo_url: e.target.value }))} placeholder="الأيقونة (emoji مثل 🤖)" className="w-full p-3 bg-muted border border-border rounded-xl text-foreground" />
+              <select value={form.category_id} onChange={(e) => setForm(f => ({ ...f, category_id: e.target.value }))} className="w-full p-3 bg-muted border border-border rounded-xl text-foreground">
+                <option value="">اختر فئة</option>
+                {categories.map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+              <label className="flex items-center gap-2">
+                <input type="checkbox" checked={form.requires_subscription} onChange={(e) => setForm(f => ({ ...f, requires_subscription: e.target.checked }))} className="rounded" />
+                <span className="text-sm text-foreground">يتطلب اشتراك Pro</span>
+              </label>
+              <button onClick={handleSubmit} className="w-full py-3 bg-primary text-primary-foreground rounded-xl font-medium">{editingTool ? 'تحديث' : 'إضافة'}</button>
+            </div>
+          </Modal>
+        )}
+      </AnimatePresence>
+    </motion.div>
+  );
+}
+
+// Plans Tab
+function PlansTab() {
+  const { data: plans, loading, refetch } = useAdminPlans();
+  const [showModal, setShowModal] = useState(false);
+  const [editingPlan, setEditingPlan] = useState<any>(null);
+  const [form, setForm] = useState({
+    name: '',
+    description: '',
+    price: 0,
+    duration_days: 30,
+    max_tools_access: -1
+  });
+
+  const resetForm = () => {
+    setForm({ name: '', description: '', price: 0, duration_days: 30, max_tools_access: -1 });
+    setEditingPlan(null);
+  };
+
+  const handleSubmit = async () => {
+    if (!form.name) { toast.error('يرجى إدخال اسم الخطة'); return; }
+
+    if (editingPlan) {
+      const { error } = await supabase.from('subscription_plans').update(form).eq('id', editingPlan.id);
+      if (error) toast.error('فشل في التحديث');
+      else { toast.success('تم التحديث'); setShowModal(false); resetForm(); refetch(); }
+    } else {
+      const { error } = await supabase.from('subscription_plans').insert({ ...form, is_active: true });
+      if (error) toast.error('فشل في الإضافة');
+      else { toast.success('تمت الإضافة'); setShowModal(false); resetForm(); refetch(); }
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('هل أنت متأكد من الحذف؟')) return;
+    const { error } = await supabase.from('subscription_plans').delete().eq('id', id);
+    if (error) toast.error('فشل في الحذف');
+    else { toast.success('تم الحذف'); refetch(); }
+  };
+
+  const handleToggleActive = async (id: string, current: boolean) => {
+    const { error } = await supabase.from('subscription_plans').update({ is_active: !current }).eq('id', id);
+    if (error) toast.error('فشل في التحديث');
+    else refetch();
+  };
+
+  const openEdit = (plan: any) => {
+    setEditingPlan(plan);
+    setForm({
+      name: plan.name,
+      description: plan.description || '',
+      price: plan.price,
+      duration_days: plan.duration_days,
+      max_tools_access: plan.max_tools_access
+    });
+    setShowModal(true);
+  };
+
+  if (loading) return <div className="text-center py-8 text-muted-foreground">جاري التحميل...</div>;
+
+  return (
+    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h2 className="text-lg font-semibold text-foreground">خطط الاشتراك ({plans.length})</h2>
+        <button onClick={() => { resetForm(); setShowModal(true); }} className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-xl text-sm">
+          <Plus className="w-4 h-4" /> إضافة
+        </button>
+      </div>
+
+      <div className="space-y-3">
+        {plans.map((plan: any) => (
+          <div key={plan.id} className={`glass-card rounded-xl p-4 ${!plan.is_active ? 'opacity-50' : ''}`}>
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary to-secondary flex items-center justify-center">
+                <CreditCard className="w-6 h-6 text-primary-foreground" />
+              </div>
+              <div className="flex-1">
+                <div className="flex items-center gap-2">
+                  <p className="font-medium text-foreground">{plan.name}</p>
+                  {!plan.is_active && <span className="px-2 py-0.5 bg-muted text-muted-foreground text-xs rounded-full">معطل</span>}
+                </div>
+                <p className="text-lg font-bold text-primary">${plan.price} <span className="text-xs text-muted-foreground font-normal">/ {plan.duration_days} يوم</span></p>
+              </div>
+              <div className="flex gap-2">
+                <button onClick={() => openEdit(plan)} className="p-2 hover:bg-muted rounded-lg"><Edit2 className="w-4 h-4 text-muted-foreground" /></button>
+                <button onClick={() => handleToggleActive(plan.id, plan.is_active)} className="p-2 hover:bg-muted rounded-lg">
+                  {plan.is_active ? <Ban className="w-4 h-4 text-orange-500" /> : <CheckCircle className="w-4 h-4 text-success" />}
+                </button>
+                <button onClick={() => handleDelete(plan.id)} className="p-2 hover:bg-destructive/20 rounded-lg"><Trash2 className="w-4 h-4 text-destructive" /></button>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <AnimatePresence>
+        {showModal && (
+          <Modal onClose={() => { setShowModal(false); resetForm(); }} title={editingPlan ? 'تعديل خطة' : 'إضافة خطة'}>
+            <div className="space-y-4">
+              <input value={form.name} onChange={(e) => setForm(f => ({ ...f, name: e.target.value }))} placeholder="اسم الخطة *" className="w-full p-3 bg-muted border border-border rounded-xl text-foreground" />
+              <textarea value={form.description} onChange={(e) => setForm(f => ({ ...f, description: e.target.value }))} placeholder="الوصف" className="w-full p-3 bg-muted border border-border rounded-xl text-foreground min-h-[80px]" />
+              <input type="number" value={form.price} onChange={(e) => setForm(f => ({ ...f, price: parseFloat(e.target.value) }))} placeholder="السعر (USD)" className="w-full p-3 bg-muted border border-border rounded-xl text-foreground" />
+              <input type="number" value={form.duration_days} onChange={(e) => setForm(f => ({ ...f, duration_days: parseInt(e.target.value) }))} placeholder="المدة (أيام)" className="w-full p-3 bg-muted border border-border rounded-xl text-foreground" />
+              <button onClick={handleSubmit} className="w-full py-3 bg-primary text-primary-foreground rounded-xl font-medium">{editingPlan ? 'تحديث' : 'إضافة'}</button>
+            </div>
+          </Modal>
+        )}
+      </AnimatePresence>
+    </motion.div>
+  );
+}
+
+// Categories Tab
+function CategoriesTab() {
+  const { data: categories, loading, refetch } = useAdminCategories();
+  const [showModal, setShowModal] = useState(false);
+  const [editingCat, setEditingCat] = useState<any>(null);
+  const [form, setForm] = useState({ name: '', description: '', icon: '', requires_subscription: false });
+
+  const resetForm = () => { setForm({ name: '', description: '', icon: '', requires_subscription: false }); setEditingCat(null); };
+
+  const handleSubmit = async () => {
+    if (!form.name) { toast.error('يرجى إدخال اسم الفئة'); return; }
+
+    if (editingCat) {
+      const { error } = await supabase.from('categories').update(form).eq('id', editingCat.id);
+      if (error) toast.error('فشل في التحديث');
+      else { toast.success('تم التحديث'); setShowModal(false); resetForm(); refetch(); }
+    } else {
+      const { error } = await supabase.from('categories').insert({ ...form, is_active: true });
+      if (error) toast.error('فشل في الإضافة');
+      else { toast.success('تمت الإضافة'); setShowModal(false); resetForm(); refetch(); }
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('هل أنت متأكد من الحذف؟')) return;
+    const { error } = await supabase.from('categories').delete().eq('id', id);
+    if (error) toast.error('فشل في الحذف');
+    else { toast.success('تم الحذف'); refetch(); }
+  };
+
+  const handleToggleActive = async (id: string, current: boolean) => {
+    const { error } = await supabase.from('categories').update({ is_active: !current }).eq('id', id);
+    if (error) toast.error('فشل في التحديث');
+    else refetch();
+  };
+
+  const openEdit = (cat: any) => {
+    setEditingCat(cat);
+    setForm({ name: cat.name, description: cat.description || '', icon: cat.icon || '', requires_subscription: cat.requires_subscription });
+    setShowModal(true);
+  };
+
+  if (loading) return <div className="text-center py-8 text-muted-foreground">جاري التحميل...</div>;
+
+  return (
+    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h2 className="text-lg font-semibold text-foreground">الفئات ({categories.length})</h2>
+        <button onClick={() => { resetForm(); setShowModal(true); }} className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-xl text-sm">
+          <Plus className="w-4 h-4" /> إضافة
+        </button>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        {categories.map((cat: any) => (
+          <div key={cat.id} className={`glass-card rounded-xl p-4 ${!cat.is_active ? 'opacity-50' : ''}`}>
+            <div className="text-center">
+              <div className="w-12 h-12 mx-auto rounded-xl bg-muted flex items-center justify-center text-2xl mb-2">{cat.icon || '📁'}</div>
+              <p className="font-medium text-foreground text-sm">{cat.name}</p>
+              {cat.requires_subscription && <span className="pro-badge text-xs mt-1">PRO</span>}
+              <div className="flex justify-center gap-2 mt-3">
+                <button onClick={() => openEdit(cat)} className="p-1.5 hover:bg-muted rounded-lg"><Edit2 className="w-3 h-3 text-muted-foreground" /></button>
+                <button onClick={() => handleToggleActive(cat.id, cat.is_active)} className="p-1.5 hover:bg-muted rounded-lg">
+                  {cat.is_active ? <Ban className="w-3 h-3 text-orange-500" /> : <CheckCircle className="w-3 h-3 text-success" />}
+                </button>
+                <button onClick={() => handleDelete(cat.id)} className="p-1.5 hover:bg-destructive/20 rounded-lg"><Trash2 className="w-3 h-3 text-destructive" /></button>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <AnimatePresence>
+        {showModal && (
+          <Modal onClose={() => { setShowModal(false); resetForm(); }} title={editingCat ? 'تعديل فئة' : 'إضافة فئة'}>
+            <div className="space-y-4">
+              <input value={form.name} onChange={(e) => setForm(f => ({ ...f, name: e.target.value }))} placeholder="اسم الفئة *" className="w-full p-3 bg-muted border border-border rounded-xl text-foreground" />
+              <textarea value={form.description} onChange={(e) => setForm(f => ({ ...f, description: e.target.value }))} placeholder="الوصف" className="w-full p-3 bg-muted border border-border rounded-xl text-foreground min-h-[80px]" />
+              <input value={form.icon} onChange={(e) => setForm(f => ({ ...f, icon: e.target.value }))} placeholder="الأيقونة (emoji مثل 📁)" className="w-full p-3 bg-muted border border-border rounded-xl text-foreground" />
+              <label className="flex items-center gap-2">
+                <input type="checkbox" checked={form.requires_subscription} onChange={(e) => setForm(f => ({ ...f, requires_subscription: e.target.checked }))} className="rounded" />
+                <span className="text-sm text-foreground">يتطلب اشتراك Pro</span>
+              </label>
+              <button onClick={handleSubmit} className="w-full py-3 bg-primary text-primary-foreground rounded-xl font-medium">{editingCat ? 'تحديث' : 'إضافة'}</button>
+            </div>
+          </Modal>
+        )}
+      </AnimatePresence>
+    </motion.div>
+  );
+}
+
+// Modal Component
+function Modal({ onClose, title, children }: { onClose: () => void; title: string; children: React.ReactNode }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <motion.div
+        initial={{ scale: 0.95, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        exit={{ scale: 0.95, opacity: 0 }}
+        onClick={(e) => e.stopPropagation()}
+        className="w-full max-w-md glass-card rounded-2xl p-6"
+      >
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold text-foreground">{title}</h3>
+          <button onClick={onClose} className="p-2 hover:bg-muted rounded-lg"><X className="w-5 h-5 text-muted-foreground" /></button>
         </div>
-      </nav>
-    </div>
+        {children}
+      </motion.div>
+    </motion.div>
   );
 }

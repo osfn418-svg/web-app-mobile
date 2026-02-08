@@ -20,12 +20,12 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { toast } from 'sonner';
 
 export default function ProfilePage() {
-  const { user, isPro, logout } = useAuth();
+  const { profile, isPro, isAdmin, logout } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
 
-  const handleLogout = () => {
-    logout();
+  const handleLogout = async () => {
+    await logout();
     toast.success('تم تسجيل الخروج');
     navigate('/login');
   };
@@ -33,7 +33,7 @@ export default function ProfilePage() {
   const menuItems = [
     { 
       title: 'إدارة', 
-      items: user?.role === 'admin' ? [
+      items: isAdmin ? [
         { icon: Settings2, label: 'لوحة التحكم', href: '/admin' },
       ] : []
     },
@@ -85,13 +85,18 @@ export default function ProfilePage() {
         >
           <div className="flex items-center gap-4">
             <div className="w-16 h-16 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center text-2xl font-bold text-primary-foreground">
-              {user?.full_name?.charAt(0) || 'م'}
+              {profile?.full_name?.charAt(0) || 'م'}
             </div>
             <div className="flex-1">
               <div className="flex items-center gap-2">
                 <h2 className="text-lg font-bold text-foreground">
-                  {user?.full_name || 'مستخدم'}
+                  {profile?.full_name || 'مستخدم'}
                 </h2>
+                {isAdmin && (
+                  <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-destructive text-destructive-foreground">
+                    أدمن
+                  </span>
+                )}
                 <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
                   isPro 
                     ? 'bg-gradient-pro text-primary-foreground' 
@@ -100,7 +105,7 @@ export default function ProfilePage() {
                   {isPro ? 'PRO' : 'FREE'}
                 </span>
               </div>
-              <p className="text-sm text-muted-foreground">{user?.email}</p>
+              <p className="text-sm text-muted-foreground">@{profile?.username}</p>
             </div>
           </div>
         </motion.div>
