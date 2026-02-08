@@ -32,19 +32,18 @@ serve(async (req) => {
 
     const systemPrompt = systemPrompts[toolType] || systemPrompts.default;
     
-    // Model mapping - support multiple providers
+    // Model mapping - support multiple providers (using correct AIML API model IDs)
     const modelMapping: Record<string, string> = {
-      "gemini-3": "google/gemini-2.5-flash",
+      "gemini-3": "google/gemini-3-flash-preview",
       "gemini-pro": "google/gemini-2.5-pro",
-      "gpt-5": "gpt-4o",
+      "gpt-5": "gpt-5-chat-latest",
       "gpt-4": "gpt-4o",
-      "claude": "anthropic/claude-3.5-sonnet",
-      "deepseek": "deepseek/deepseek-chat",
-      "deepseek-coder": "deepseek/deepseek-coder",
+      "claude": "anthropic/claude-3.7-sonnet",
+      "deepseek": "deepseek-chat",
     };
     
     // Use provided model or default to a fast model
-    const selectedModel = modelMapping[model] || model || "deepseek/deepseek-chat";
+    const selectedModel = modelMapping[model] || model || "deepseek-chat";
 
     const response = await fetch("https://api.aimlapi.com/v1/chat/completions", {
       method: "POST",
