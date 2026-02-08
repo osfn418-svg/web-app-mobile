@@ -5,20 +5,23 @@ import {
   Bell, 
   Globe, 
   Moon, 
+  Sun,
   HelpCircle, 
   Shield, 
   LogOut,
   Edit2,
-  Crown
+  Crown,
+  Settings2
 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Settings2 } from 'lucide-react';
 import MobileLayout from '@/components/layout/MobileLayout';
 import { useAuth } from '@/contexts/AuthContext';
+import { useTheme } from '@/contexts/ThemeContext';
 import { toast } from 'sonner';
 
 export default function ProfilePage() {
   const { user, isPro, logout } = useAuth();
+  const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
 
   const handleLogout = () => {
@@ -46,7 +49,7 @@ export default function ProfilePage() {
       items: [
         { icon: Bell, label: 'الإشعارات', href: '#' },
         { icon: Globe, label: 'اللغة', value: 'العربية', href: '#' },
-        { icon: Moon, label: 'الوضع الليلي', toggle: true, href: '#' },
+        { icon: theme === 'dark' ? Moon : Sun, label: theme === 'dark' ? 'الوضع الليلي' : 'الوضع النهاري', toggle: true, isThemeToggle: true, href: '#' },
       ]
     },
     { 
@@ -140,26 +143,45 @@ export default function ProfilePage() {
             <h3 className="text-sm font-medium text-muted-foreground mb-3">{section.title}</h3>
             <div className="glass-card rounded-2xl overflow-hidden">
               {section.items.map((item, itemIndex) => (
-                <Link
-                  key={item.label}
-                  to={item.href}
-                  className={`flex items-center gap-4 p-4 hover:bg-muted/50 transition-colors ${
-                    itemIndex !== section.items.length - 1 ? 'border-b border-border' : ''
-                  }`}
-                >
-                  <item.icon className="w-5 h-5 text-muted-foreground" />
-                  <span className="flex-1 text-foreground">{item.label}</span>
-                  {item.value && (
-                    <span className="text-sm text-muted-foreground">{item.value}</span>
-                  )}
-                  {item.toggle ? (
-                    <div className="w-10 h-6 bg-primary rounded-full relative">
-                      <div className="absolute right-1 top-1 w-4 h-4 bg-foreground rounded-full" />
+                item.isThemeToggle ? (
+                  <button
+                    key={item.label}
+                    onClick={toggleTheme}
+                    className={`flex items-center gap-4 p-4 hover:bg-muted/50 transition-colors w-full ${
+                      itemIndex !== section.items.length - 1 ? 'border-b border-border' : ''
+                    }`}
+                  >
+                    <item.icon className="w-5 h-5 text-muted-foreground" />
+                    <span className="flex-1 text-foreground text-right">{item.label}</span>
+                    <div className={`w-12 h-7 rounded-full relative transition-colors ${
+                      theme === 'dark' ? 'bg-primary' : 'bg-muted'
+                    }`}>
+                      <motion.div 
+                        className="absolute top-1 w-5 h-5 bg-foreground rounded-full"
+                        animate={{ 
+                          right: theme === 'dark' ? 4 : 'auto',
+                          left: theme === 'dark' ? 'auto' : 4
+                        }}
+                        transition={{ type: 'spring', stiffness: 500, damping: 30 }}
+                      />
                     </div>
-                  ) : (
+                  </button>
+                ) : (
+                  <Link
+                    key={item.label}
+                    to={item.href}
+                    className={`flex items-center gap-4 p-4 hover:bg-muted/50 transition-colors ${
+                      itemIndex !== section.items.length - 1 ? 'border-b border-border' : ''
+                    }`}
+                  >
+                    <item.icon className="w-5 h-5 text-muted-foreground" />
+                    <span className="flex-1 text-foreground">{item.label}</span>
+                    {item.value && (
+                      <span className="text-sm text-muted-foreground">{item.value}</span>
+                    )}
                     <ChevronLeft className="w-5 h-5 text-muted-foreground" />
-                  )}
-                </Link>
+                  </Link>
+                )
               ))}
             </div>
           </motion.div>

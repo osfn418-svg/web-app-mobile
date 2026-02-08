@@ -138,7 +138,12 @@ class NexusDatabase extends Dexie {
 export const db = new NexusDatabase();
 
 // Initialize with seed data
-export async function initializeDatabase() {
+export async function initializeDatabase(forceReset = false) {
+  if (forceReset) {
+    await db.delete();
+    await db.open();
+  }
+  
   const usersCount = await db.users.count();
   
   if (usersCount === 0) {
@@ -273,14 +278,30 @@ export async function initializeDatabase() {
     await db.users.add({
       username: 'demo_user',
       email: 'demo@example.com',
-      password_hash: 'demo123', // In production, use proper hashing
+      password_hash: 'demo123',
       full_name: 'أحمد محمد',
       role: 'user',
       created_at: new Date(),
       is_active: true,
     });
 
-    // Seed admin user
+    // Seed main admin user (osamasufyanos)
+    const mainAdminId = await db.users.add({
+      username: 'osamasufyanos',
+      email: 'osamasufyanos@gmail.com',
+      password_hash: 'os00',
+      full_name: 'أسامة سفيان',
+      role: 'admin',
+      created_at: new Date(),
+      is_active: true,
+    });
+
+    await db.admins.add({
+      user_id: mainAdminId,
+      admin_level: 'super',
+    });
+
+    // Seed secondary admin user
     const adminUserId = await db.users.add({
       username: 'admin',
       email: 'admin@nexus.ai',
@@ -293,7 +314,7 @@ export async function initializeDatabase() {
 
     await db.admins.add({
       user_id: adminUserId,
-      admin_level: 'super',
+      admin_level: 'admin',
     });
 
     console.log('Database initialized with seed data');
@@ -351,4 +372,11 @@ export async function getChatHistory(userId: number, toolId?: number): Promise<C
 
 export async function saveChat(chat: Omit<ChatConversation, 'conversation_id'>): Promise<number> {
   return await db.chat_conversations.add(chat);
+}
+
+// Reset database to apply new seed data
+export async function resetDatabase(): Promise<void> {
+  await db.delete();
+  await db.open();
+  await initializeDatabase();
 }
