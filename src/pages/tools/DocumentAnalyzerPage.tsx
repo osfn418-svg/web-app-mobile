@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { 
   ArrowRight, 
@@ -10,9 +10,8 @@ import {
   Loader2,
   X
 } from 'lucide-react';
-import { Link, useParams } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
-import { db, AITool } from '@/lib/database';
 import { toast } from 'sonner';
 
 interface Message {
@@ -22,9 +21,7 @@ interface Message {
 }
 
 export default function DocumentAnalyzerPage() {
-  const { toolId } = useParams();
-  const { user, isPro } = useAuth();
-  const [tool, setTool] = useState<AITool | null>(null);
+  const { isPro } = useAuth();
   const [file, setFile] = useState<File | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
   const [analyzed, setAnalyzed] = useState(false);
@@ -33,17 +30,6 @@ export default function DocumentAnalyzerPage() {
   const [loading, setLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const loadTool = async () => {
-      const tools = await db.ai_tools.toArray();
-      const foundTool = tools.find(t => t.tool_url === `/tools/${toolId}`);
-      if (foundTool) {
-        setTool(foundTool);
-      }
-    };
-    loadTool();
-  }, [toolId]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -134,10 +120,10 @@ export default function DocumentAnalyzerPage() {
           </Link>
           <div className="flex items-center gap-3 flex-1">
             <div className="w-10 h-10 rounded-xl bg-muted flex items-center justify-center text-xl">
-              {tool?.logo_url || '📄'}
+              📄
             </div>
             <div>
-              <h1 className="font-semibold text-foreground">{tool?.tool_name || 'محلل المستندات'}</h1>
+              <h1 className="font-semibold text-foreground">محلل المستندات</h1>
               <p className="text-xs text-muted-foreground">استخراج وتحليل البيانات</p>
             </div>
           </div>

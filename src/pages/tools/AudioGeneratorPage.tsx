@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { 
   ArrowRight, 
@@ -10,9 +10,8 @@ import {
   Music,
   Volume2
 } from 'lucide-react';
-import { Link, useParams } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
-import { db, AITool } from '@/lib/database';
 import { toast } from 'sonner';
 
 interface GeneratedAudio {
@@ -24,11 +23,9 @@ interface GeneratedAudio {
 }
 
 export default function AudioGeneratorPage() {
-  const { toolId } = useParams();
-  const { user, isPro } = useAuth();
+  const { isPro } = useAuth();
   const [prompt, setPrompt] = useState('');
   const [loading, setLoading] = useState(false);
-  const [tool, setTool] = useState<AITool | null>(null);
   const [audios, setAudios] = useState<GeneratedAudio[]>([]);
   const [genre, setGenre] = useState('ambient');
 
@@ -38,17 +35,6 @@ export default function AudioGeneratorPage() {
     { id: 'classical', label: 'كلاسيكي', emoji: '🎻' },
     { id: 'pop', label: 'بوب', emoji: '🎤' },
   ];
-
-  useEffect(() => {
-    const loadTool = async () => {
-      const tools = await db.ai_tools.toArray();
-      const foundTool = tools.find(t => t.tool_url === `/tools/${toolId}`);
-      if (foundTool) {
-        setTool(foundTool);
-      }
-    };
-    loadTool();
-  }, [toolId]);
 
   const generateAudio = async () => {
     if (!prompt.trim() || loading) return;
@@ -100,10 +86,10 @@ export default function AudioGeneratorPage() {
           </Link>
           <div className="flex items-center gap-3 flex-1">
             <div className="w-10 h-10 rounded-xl bg-muted flex items-center justify-center text-xl">
-              {tool?.logo_url || '🎵'}
+              🎵
             </div>
             <div>
-              <h1 className="font-semibold text-foreground">{tool?.tool_name || 'توليد الصوت'}</h1>
+              <h1 className="font-semibold text-foreground">توليد الصوت</h1>
               <p className="text-xs text-muted-foreground">موسيقى ومؤثرات صوتية</p>
             </div>
           </div>

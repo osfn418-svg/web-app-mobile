@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { 
   ArrowRight, 
@@ -8,9 +8,8 @@ import {
   Loader2,
   Video
 } from 'lucide-react';
-import { Link, useParams } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
-import { db, AITool } from '@/lib/database';
 import { toast } from 'sonner';
 
 interface GeneratedVideo {
@@ -22,24 +21,11 @@ interface GeneratedVideo {
 }
 
 export default function VideoGeneratorPage() {
-  const { toolId } = useParams();
-  const { user, isPro } = useAuth();
+  const { isPro } = useAuth();
   const [prompt, setPrompt] = useState('');
   const [loading, setLoading] = useState(false);
-  const [tool, setTool] = useState<AITool | null>(null);
   const [videos, setVideos] = useState<GeneratedVideo[]>([]);
   const [duration, setDuration] = useState('5');
-
-  useEffect(() => {
-    const loadTool = async () => {
-      const tools = await db.ai_tools.toArray();
-      const foundTool = tools.find(t => t.tool_url === `/tools/${toolId}`);
-      if (foundTool) {
-        setTool(foundTool);
-      }
-    };
-    loadTool();
-  }, [toolId]);
 
   const generateVideo = async () => {
     if (!prompt.trim() || loading) return;
@@ -89,10 +75,10 @@ export default function VideoGeneratorPage() {
           </Link>
           <div className="flex items-center gap-3 flex-1">
             <div className="w-10 h-10 rounded-xl bg-muted flex items-center justify-center text-xl">
-              {tool?.logo_url || '🎬'}
+              🎬
             </div>
             <div>
-              <h1 className="font-semibold text-foreground">{tool?.tool_name || 'توليد الفيديو'}</h1>
+              <h1 className="font-semibold text-foreground">توليد الفيديو</h1>
               <p className="text-xs text-muted-foreground">نص إلى فيديو سينمائي</p>
             </div>
           </div>

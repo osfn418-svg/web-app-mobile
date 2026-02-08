@@ -9,15 +9,12 @@ import {
   Phone,
   PhoneOff
 } from 'lucide-react';
-import { Link, useParams } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
-import { db, AITool } from '@/lib/database';
 import { toast } from 'sonner';
 
 export default function VoiceChatPage() {
-  const { toolId } = useParams();
-  const { user, isPro } = useAuth();
-  const [tool, setTool] = useState<AITool | null>(null);
+  const { isPro } = useAuth();
   const [isCallActive, setIsCallActive] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [isSpeakerOn, setIsSpeakerOn] = useState(true);
@@ -26,17 +23,6 @@ export default function VoiceChatPage() {
   const [transcript, setTranscript] = useState('');
   const [callDuration, setCallDuration] = useState(0);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
-
-  useEffect(() => {
-    const loadTool = async () => {
-      const tools = await db.ai_tools.toArray();
-      const foundTool = tools.find(t => t.tool_url === `/tools/${toolId}`);
-      if (foundTool) {
-        setTool(foundTool);
-      }
-    };
-    loadTool();
-  }, [toolId]);
 
   useEffect(() => {
     if (isCallActive) {
@@ -137,10 +123,10 @@ export default function VoiceChatPage() {
           </Link>
           <div className="flex items-center gap-3 flex-1">
             <div className="w-10 h-10 rounded-xl bg-muted flex items-center justify-center text-xl">
-              {tool?.logo_url || '🎙️'}
+              🎙️
             </div>
             <div>
-              <h1 className="font-semibold text-foreground">{tool?.tool_name || 'المحادثة الصوتية'}</h1>
+              <h1 className="font-semibold text-foreground">المحادثة الصوتية</h1>
               <p className="text-xs text-muted-foreground">تفاعل صوتي طبيعي</p>
             </div>
           </div>
