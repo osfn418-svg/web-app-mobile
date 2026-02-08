@@ -35,7 +35,7 @@ serve(async (req) => {
       body: JSON.stringify({
         model: "openai/tts-1",
         text: text,
-        voice: voice || "coral",
+        voice: voice || "alloy",
       }),
     });
 
@@ -61,7 +61,7 @@ serve(async (req) => {
     const audioUrl = data.audio?.url;
     
     if (!audioUrl) {
-      console.error("No audio URL in response:", data);
+      console.error("No audio URL in response:", JSON.stringify(data));
       return new Response(JSON.stringify({ error: "لم يتم استلام رابط الصوت" }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
