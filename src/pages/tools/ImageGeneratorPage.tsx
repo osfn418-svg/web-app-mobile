@@ -22,14 +22,6 @@ export default function ImageGeneratorPage() {
   const [prompt, setPrompt] = useState('');
   const [loading, setLoading] = useState(false);
   const [images, setImages] = useState<GeneratedImage[]>([]);
-  const [style, setStyle] = useState('realistic');
-
-  const styles = [
-    { id: 'realistic', label: 'واقعي', emoji: '📷' },
-    { id: 'anime', label: 'أنمي', emoji: '🎨' },
-    { id: 'digital-art', label: 'فن رقمي', emoji: '🖼️' },
-    { id: '3d', label: 'ثلاثي الأبعاد', emoji: '🎮' },
-  ];
 
   const generateImage = async () => {
     if (!prompt.trim() || loading) return;
@@ -43,11 +35,7 @@ export default function ImageGeneratorPage() {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
         },
-        body: JSON.stringify({ 
-          prompt, 
-          style,
-          model: 'flux/schnell'
-        }),
+        body: JSON.stringify({ prompt }),
       });
 
       if (response.status === 429) {
@@ -138,27 +126,6 @@ export default function ImageGeneratorPage() {
           </div>
         </div>
       </header>
-
-      {/* Style Selector */}
-      <div className="px-4 py-3">
-        <p className="text-sm text-muted-foreground mb-2">نمط الصورة:</p>
-        <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
-          {styles.map((s) => (
-            <button
-              key={s.id}
-              onClick={() => setStyle(s.id)}
-              className={`px-4 py-2 rounded-xl text-sm whitespace-nowrap transition-colors flex items-center gap-2 ${
-                style === s.id
-                  ? 'bg-primary text-primary-foreground'
-                  : 'bg-muted text-muted-foreground hover:bg-muted/80'
-              }`}
-            >
-              <span>{s.emoji}</span>
-              <span>{s.label}</span>
-            </button>
-          ))}
-        </div>
-      </div>
 
       {/* Generated Images */}
       <main className="flex-1 overflow-y-auto px-4 py-4">
