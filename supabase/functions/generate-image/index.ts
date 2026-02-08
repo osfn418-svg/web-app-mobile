@@ -11,26 +11,21 @@ serve(async (req) => {
   }
 
   try {
-    const { prompt, style, model } = await req.json();
+    const { prompt } = await req.json();
     const AIML_API_KEY = Deno.env.get("AIML_API_KEY");
     
     if (!AIML_API_KEY) {
       throw new Error("AIML_API_KEY is not configured");
     }
 
-    // Style modifiers for the prompt
-    const styleModifiers: Record<string, string> = {
-      realistic: "photorealistic, high quality, detailed, 8k",
-      anime: "anime style, vibrant colors, manga art",
-      "digital-art": "digital art, concept art, illustration",
-      "3d": "3D render, unreal engine, CGI, volumetric lighting",
-    };
+    if (!prompt || prompt.trim().length === 0) {
+      return new Response(JSON.stringify({ error: "الوصف مطلوب" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
-    const enhancedPrompt = `${prompt}, ${styleModifiers[style] || styleModifiers.realistic}`;
-    
-    // Use FLUX model for image generation via AIML API
-    const selectedModel = model || "flux/schnell";
-
+    // Use FLUX model - generates exactly what user describes
     const response = await fetch("https://api.aimlapi.com/v1/images/generations", {
       method: "POST",
       headers: {
@@ -38,8 +33,8 @@ serve(async (req) => {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: selectedModel,
-        prompt: enhancedPrompt,
+        model: "flux/schnell",
+        prompt: prompt,
         n: 1,
         size: "1024x1024",
       }),
@@ -64,9 +59,19 @@ serve(async (req) => {
 
     const data = await response.json();
     
+    const imageUrl = data.data?.[0]?.url || data.data?.[0]?.b64_json;
+    
+    if (!imageUrl) {
+      console.error("No image in response:", JSON.stringify(data));
+      return new Response(JSON.stringify({ error: "لم يتم توليد الصورة" }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    
     return new Response(JSON.stringify({ 
       success: true,
-      image: data.data?.[0]?.url || data.data?.[0]?.b64_json,
+      image: imageUrl,
       isBase64: !!data.data?.[0]?.b64_json
     }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
