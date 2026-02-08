@@ -1,10 +1,11 @@
 import { motion } from 'framer-motion';
-import { ChevronLeft, Clock, Video, MessageCircle } from 'lucide-react';
+import { ChevronLeft, Clock, MessageCircle } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import MobileLayout from '@/components/layout/MobileLayout';
 import ToolCard from '@/components/cards/ToolCard';
 import { useAuth } from '@/contexts/AuthContext';
 import { useAITools, useCategories } from '@/hooks/useRealtimeData';
+import { useRecentActivity } from '@/hooks/useRecentActivity';
 import { useState } from 'react';
 
 export default function HomePage() {
@@ -12,6 +13,7 @@ export default function HomePage() {
   const { data: tools, loading: toolsLoading } = useAITools();
   const { data: categories } = useCategories();
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const { activities, loading: activitiesLoading } = useRecentActivity(5);
 
   const filteredTools = selectedCategory === null 
     ? tools 
@@ -184,7 +186,7 @@ export default function HomePage() {
           )}
         </motion.div>
 
-        {/* Recent Activity Placeholder */}
+        {/* Recent Activity */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -192,24 +194,53 @@ export default function HomePage() {
         >
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold text-foreground">النشاط الأخير</h2>
-            <Link to="/saved" className="text-sm text-primary">عرض الكل</Link>
+            <Link to="/tools/assistant" className="text-sm text-primary">عرض الكل</Link>
           </div>
 
           <div className="space-y-3">
-            <div className="glass-card rounded-xl p-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center">
-                  <Video className="w-5 h-5 text-primary" />
-                </div>
-                <div className="flex-1">
-                  <p className="text-sm text-foreground">ابدأ باستخدام الأدوات</p>
-                  <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                    <Clock className="w-3 h-3" />
-                    <span>جاهز للاستخدام</span>
+            {activitiesLoading ? (
+              <div className="glass-card rounded-xl p-4 animate-pulse bg-muted h-16" />
+            ) : activities.length === 0 ? (
+              <div className="glass-card rounded-xl p-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-primary/30 to-secondary/30 flex items-center justify-center text-xl">
+                    💬
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm text-foreground">ابدأ محادثة جديدة</p>
+                    <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                      <Clock className="w-3 h-3" />
+                      <span>لا توجد محادثات سابقة</span>
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
+            ) : (
+              activities.map((activity) => (
+                <Link key={activity.id} to="/tools/assistant">
+                  <motion.div 
+                    whileHover={{ scale: 1.02 }}
+                    className="glass-card rounded-xl p-4 hover:bg-muted/50 transition-colors"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-primary/30 to-secondary/30 flex items-center justify-center text-xl">
+                        {activity.tool_icon}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm text-foreground truncate">{activity.title}</p>
+                        <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                          <Clock className="w-3 h-3" />
+                          <span>{new Date(activity.created_at).toLocaleDateString('ar-SA')}</span>
+                          <span className="mx-1">•</span>
+                          <span>{activity.tool_name}</span>
+                        </div>
+                      </div>
+                      <ChevronLeft className="w-4 h-4 text-muted-foreground" />
+                    </div>
+                  </motion.div>
+                </Link>
+              ))
+            )}
           </div>
         </motion.div>
       </div>

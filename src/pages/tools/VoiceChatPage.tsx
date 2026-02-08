@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   ArrowRight, 
@@ -12,6 +12,8 @@ import {
 import { Link } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
+import { streamChat } from '@/lib/chatService';
+import { useTTS } from '@/hooks/useTTS';
 
 export default function VoiceChatPage() {
   const { isPro } = useAuth();
@@ -19,10 +21,14 @@ export default function VoiceChatPage() {
   const [isMuted, setIsMuted] = useState(false);
   const [isSpeakerOn, setIsSpeakerOn] = useState(true);
   const [isListening, setIsListening] = useState(false);
-  const [isSpeaking, setIsSpeaking] = useState(false);
   const [transcript, setTranscript] = useState('');
+  const [userTranscript, setUserTranscript] = useState('');
   const [callDuration, setCallDuration] = useState(0);
+  const [messages, setMessages] = useState<{role: 'user' | 'assistant', content: string}[]>([]);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const recognitionRef = useRef<any>(null);
+  
+  const { speak, stop: stopSpeaking, isSpeaking } = useTTS({ lang: 'ar-SA', rate: 1 });
 
   useEffect(() => {
     if (isCallActive) {
@@ -49,69 +55,172 @@ export default function VoiceChatPage() {
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
-  const startCall = () => {
+  // Initialize speech recognition
+  const initSpeechRecognition = useCallback(() => {
+    if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+      toast.error('التعرف على الصوت غير مدعوم في هذا المتصفح');
+      return null;
+    }
+
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    const recognition = new SpeechRecognition();
+    recognition.lang = 'ar-SA';
+    recognition.continuous = true;
+    recognition.interimResults = true;
+
+    recognition.onresult = (event: any) => {
+      let finalTranscript = '';
+      let interimTranscript = '';
+
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const transcript = event.results[i][0].transcript;
+        if (event.results[i].isFinal) {
+          finalTranscript += transcript;
+        } else {
+          interimTranscript += transcript;
+        }
+      }
+
+      if (finalTranscript) {
+        setUserTranscript(finalTranscript);
+        handleUserMessage(finalTranscript);
+      } else {
+        setUserTranscript(interimTranscript);
+      }
+    };
+
+    recognition.onerror = (event: any) => {
+      console.error('Speech recognition error:', event.error);
+      if (event.error !== 'no-speech') {
+        toast.error('خطأ في التعرف على الصوت');
+      }
+    };
+
+    recognition.onend = () => {
+      if (isCallActive && !isMuted && !isSpeaking) {
+        try {
+          recognition.start();
+        } catch (e) {
+          // Already started
+        }
+      }
+    };
+
+    return recognition;
+  }, [isCallActive, isMuted, isSpeaking]);
+
+  const handleUserMessage = async (text: string) => {
+    if (!text.trim()) return;
+
+    setIsListening(false);
+    const userMsg = { role: 'user' as const, content: text };
+    const newMessages = [...messages, userMsg];
+    setMessages(newMessages);
+
+    let assistantContent = '';
+
+    try {
+      await streamChat({
+        messages: newMessages,
+        toolType: 'assistant',
+        onDelta: (chunk) => {
+          assistantContent += chunk;
+          setTranscript(assistantContent);
+        },
+        onDone: () => {
+          setMessages(prev => [...prev, { role: 'assistant', content: assistantContent }]);
+          // Speak the response
+          if (isSpeakerOn && assistantContent) {
+            speak(assistantContent);
+          }
+          setUserTranscript('');
+          // Resume listening after speaking
+          setTimeout(() => {
+            if (isCallActive && !isMuted) {
+              setIsListening(true);
+            }
+          }, assistantContent.length * 50); // Approximate speaking time
+        },
+        onError: (error) => {
+          toast.error(error);
+          setIsListening(true);
+        }
+      });
+    } catch (error) {
+      toast.error('حدث خطأ');
+      setIsListening(true);
+    }
+  };
+
+  const startCall = async () => {
     if (!isPro) {
       toast.error('هذه الميزة متاحة فقط لمشتركي Pro');
       return;
     }
+
+    try {
+      await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch (error) {
+      toast.error('يرجى السماح بالوصول للميكروفون');
+      return;
+    }
+
     setIsCallActive(true);
+    setMessages([]);
     toast.success('تم بدء المكالمة');
     
-    // Simulate AI greeting
+    // AI greeting
+    const greeting = 'مرحباً! أنا المساعد الصوتي. كيف يمكنني مساعدتك اليوم؟';
+    setTranscript(greeting);
+    speak(greeting);
+    setMessages([{ role: 'assistant', content: greeting }]);
+
+    // Start listening after greeting
     setTimeout(() => {
-      setIsSpeaking(true);
-      setTranscript('مرحباً! أنا المساعد الصوتي. كيف يمكنني مساعدتك اليوم؟');
-      setTimeout(() => {
-        setIsSpeaking(false);
+      const recognition = initSpeechRecognition();
+      if (recognition) {
+        recognitionRef.current = recognition;
+        recognition.start();
         setIsListening(true);
-      }, 3000);
-    }, 1000);
+      }
+    }, 3000);
   };
 
   const endCall = () => {
+    if (recognitionRef.current) {
+      recognitionRef.current.stop();
+      recognitionRef.current = null;
+    }
+    stopSpeaking();
     setIsCallActive(false);
     setIsListening(false);
-    setIsSpeaking(false);
     setTranscript('');
+    setUserTranscript('');
+    setMessages([]);
     toast.info('تم إنهاء المكالمة');
   };
 
   const toggleMute = () => {
     setIsMuted(!isMuted);
+    if (recognitionRef.current) {
+      if (!isMuted) {
+        recognitionRef.current.stop();
+        setIsListening(false);
+      } else {
+        recognitionRef.current.start();
+        setIsListening(true);
+      }
+    }
     toast.info(isMuted ? 'تم تشغيل الميكروفون' : 'تم كتم الميكروفون');
   };
 
   const toggleSpeaker = () => {
     setIsSpeakerOn(!isSpeakerOn);
+    if (isSpeakerOn) {
+      stopSpeaking();
+    }
     toast.info(isSpeakerOn ? 'تم إيقاف السماعة' : 'تم تشغيل السماعة');
   };
-
-  // Simulate voice interaction
-  useEffect(() => {
-    if (isCallActive && isListening && !isSpeaking) {
-      const responses = [
-        'أفهم ما تقصده. هل تريد المزيد من التفاصيل؟',
-        'هذا سؤال مثير للاهتمام. دعني أفكر...',
-        'يمكنني مساعدتك في ذلك. ما الذي تحتاجه بالتحديد؟',
-        'رائع! لدي بعض الاقتراحات لك.',
-      ];
-
-      const interval = setInterval(() => {
-        if (Math.random() > 0.7) {
-          setIsListening(false);
-          setIsSpeaking(true);
-          setTranscript(responses[Math.floor(Math.random() * responses.length)]);
-          
-          setTimeout(() => {
-            setIsSpeaking(false);
-            setIsListening(true);
-          }, 3000);
-        }
-      }, 5000);
-
-      return () => clearInterval(interval);
-    }
-  }, [isCallActive, isListening, isSpeaking]);
 
   return (
     <div className="min-h-screen bg-background flex flex-col" dir="rtl">
@@ -127,7 +236,7 @@ export default function VoiceChatPage() {
             </div>
             <div>
               <h1 className="font-semibold text-foreground">المحادثة الصوتية</h1>
-              <p className="text-xs text-muted-foreground">تفاعل صوتي طبيعي</p>
+              <p className="text-xs text-muted-foreground">تفاعل صوتي مع AI</p>
             </div>
           </div>
           <span className="pro-badge">PRO</span>
@@ -201,7 +310,19 @@ export default function VoiceChatPage() {
               <p className="text-sm text-muted-foreground">{formatDuration(callDuration)}</p>
             </div>
 
-            {/* Transcript */}
+            {/* User transcript */}
+            {userTranscript && (
+              <motion.div
+                initial={{ opacity: 0, y: 5 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="bg-primary/20 rounded-xl p-3 mb-3"
+              >
+                <p className="text-xs text-muted-foreground mb-1">أنت:</p>
+                <p className="text-sm text-foreground">{userTranscript}</p>
+              </motion.div>
+            )}
+
+            {/* AI Transcript */}
             <AnimatePresence mode="wait">
               {transcript && (
                 <motion.div
@@ -210,6 +331,7 @@ export default function VoiceChatPage() {
                   exit={{ opacity: 0, y: -10 }}
                   className="glass-card rounded-2xl p-4 mb-8 min-h-[80px]"
                 >
+                  <p className="text-xs text-muted-foreground mb-1">المساعد:</p>
                   <p className="text-sm text-foreground">{transcript}</p>
                 </motion.div>
               )}
