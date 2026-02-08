@@ -9,12 +9,14 @@ import {
   Video,
   RefreshCw,
   AlertCircle,
-  Clock
+  Clock,
+  Trash2
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { Progress } from '@/components/ui/progress';
+import { useActivityLogger } from '@/hooks/useActivityLogger';
 
 interface GeneratedVideo {
   id: string;
@@ -32,6 +34,7 @@ interface GeneratedVideo {
 
 const VIDEO_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-video`;
 const MAX_GENERATION_TIME = 5 * 60 * 1000; // 5 minutes
+const VIDEO_TOOL_ID = '931e0aa8-c3fc-4ace-9ea4-043c1f9fe0d1';
 
 export default function VideoGeneratorPage() {
   const { isPro } = useAuth();
@@ -41,6 +44,7 @@ export default function VideoGeneratorPage() {
   const [duration, setDuration] = useState('5');
   const pollingRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
   const progressRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
+  const { logActivity } = useActivityLogger();
 
   // Cleanup polling on unmount
   useEffect(() => {
@@ -214,6 +218,13 @@ export default function VideoGeneratorPage() {
       setVideos(prev => [newVideo, ...prev]);
       setPrompt('');
       toast.success('بدأ توليد الفيديو! سيتم إكماله قريباً...');
+
+      // Log activity
+      logActivity({
+        toolId: VIDEO_TOOL_ID,
+        title: `فيديو: ${prompt.slice(0, 50)}...`,
+        type: 'generation'
+      });
 
       // Start progress simulation
       const progressInterval = setInterval(() => {

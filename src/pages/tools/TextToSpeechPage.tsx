@@ -15,6 +15,7 @@ import { toast } from 'sonner';
 import { Textarea } from '@/components/ui/textarea';
 import { Slider } from '@/components/ui/slider';
 import { useTtsPolling } from '@/hooks/useTtsPolling';
+import { useActivityLogger } from '@/hooks/useActivityLogger';
 
 interface GeneratedAudio {
   id: string;
@@ -30,6 +31,7 @@ interface GeneratedAudio {
 }
 
 const TTS_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/text-to-speech`;
+const TTS_TOOL_ID = '03e8bc68-504c-48f2-a12d-daca5ddde2a3';
 
 export default function TextToSpeechPage() {
   const [text, setText] = useState('');
@@ -40,6 +42,7 @@ export default function TextToSpeechPage() {
   const [showSettings, setShowSettings] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [currentPlayingId, setCurrentPlayingId] = useState<string | null>(null);
+  const { logActivity } = useActivityLogger();
 
   const poller = useTtsPolling({
     ttsUrl: TTS_URL,
@@ -190,6 +193,13 @@ export default function TextToSpeechPage() {
       setAudios((prev) => [newAudio, ...prev]);
       setText('');
       toast.success('تم إنشاء الصوت بنجاح!');
+      
+      // Log activity
+      logActivity({
+        toolId: TTS_TOOL_ID,
+        title: `صوت: ${requestText.slice(0, 40)}...`,
+        type: 'generation'
+      });
     } catch (error) {
       console.error('TTS error:', error);
       toast.error('حدث خطأ أثناء إنشاء الصوت');
