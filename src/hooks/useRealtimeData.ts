@@ -78,7 +78,7 @@ export function useRealtimeData<T>(
 
 // Individual hooks for each table
 export function useCategories() {
-  return useRealtimeData('categories', async () => {
+  const fetcher = useCallback(async () => {
     const { data, error } = await supabase
       .from('categories')
       .select('*')
@@ -86,11 +86,13 @@ export function useCategories() {
       .order('created_at');
     if (error) throw error;
     return data || [];
-  });
+  }, []);
+
+  return useRealtimeData('categories', fetcher);
 }
 
 export function useAITools() {
-  return useRealtimeData('ai_tools', async () => {
+  const fetcher = useCallback(async () => {
     const { data, error } = await supabase
       .from('ai_tools')
       .select('*, categories(*)')
@@ -99,11 +101,13 @@ export function useAITools() {
       .order('rating', { ascending: false });
     if (error) throw error;
     return data || [];
-  });
+  }, []);
+
+  return useRealtimeData('ai_tools', fetcher);
 }
 
 export function useSubscriptionPlans() {
-  return useRealtimeData('subscription_plans', async () => {
+  const fetcher = useCallback(async () => {
     const { data, error } = await supabase
       .from('subscription_plans')
       .select('*')
@@ -111,18 +115,22 @@ export function useSubscriptionPlans() {
       .order('price');
     if (error) throw error;
     return data || [];
-  });
+  }, []);
+
+  return useRealtimeData('subscription_plans', fetcher);
 }
 
 export function useAllProfiles() {
-  return useRealtimeData('profiles', async () => {
+  const fetcher = useCallback(async () => {
     const { data, error } = await supabase
       .from('profiles')
       .select('*, user_roles(role), user_subscriptions(*, subscription_plans(*))')
       .order('created_at', { ascending: false });
     if (error) throw error;
     return data || [];
-  });
+  }, []);
+
+  return useRealtimeData('profiles', fetcher);
 }
 
 // Admin hooks - fetch all including inactive
