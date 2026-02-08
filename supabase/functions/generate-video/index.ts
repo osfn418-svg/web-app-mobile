@@ -11,7 +11,7 @@ serve(async (req) => {
   }
 
   try {
-    const { prompt, duration, action } = await req.json();
+    const { prompt, duration, action, generationId } = await req.json();
     const AIML_API_KEY = Deno.env.get("AIML_API_KEY");
     
     if (!AIML_API_KEY) {
@@ -20,8 +20,6 @@ serve(async (req) => {
 
     // Check video generation status
     if (action === "check") {
-      const { generationId } = await req.json();
-      
       const response = await fetch(`https://api.aimlapi.com/v2/video/generations?generation_id=${generationId}`, {
         method: "GET",
         headers: {
