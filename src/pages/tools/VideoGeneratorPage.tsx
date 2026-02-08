@@ -7,11 +7,14 @@ import {
   Sparkles,
   Loader2,
   Video,
-  RefreshCw
+  RefreshCw,
+  AlertCircle,
+  Clock
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
+import { Progress } from '@/components/ui/progress';
 
 interface GeneratedVideo {
   id: string;
@@ -22,9 +25,13 @@ interface GeneratedVideo {
   timestamp: Date;
   status: 'generating' | 'completed' | 'failed';
   generationId?: string;
+  progress?: number;
+  startTime?: number;
+  errorMessage?: string;
 }
 
 const VIDEO_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-video`;
+const MAX_GENERATION_TIME = 5 * 60 * 1000; // 5 minutes
 
 export default function VideoGeneratorPage() {
   const { isPro } = useAuth();
@@ -32,25 +39,39 @@ export default function VideoGeneratorPage() {
   const [loading, setLoading] = useState(false);
   const [videos, setVideos] = useState<GeneratedVideo[]>([]);
   const [duration, setDuration] = useState('5');
-  const pollingRef = useRef<NodeJS.Timeout | null>(null);
+  const pollingRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
+  const progressRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
 
   // Cleanup polling on unmount
   useEffect(() => {
     return () => {
-      if (pollingRef.current) {
-        clearInterval(pollingRef.current);
-      }
+      pollingRef.current.forEach(interval => clearInterval(interval));
+      progressRef.current.forEach(interval => clearInterval(interval));
     };
   }, []);
 
+  const stopPolling = (videoId: string) => {
+    const polling = pollingRef.current.get(videoId);
+    if (polling) {
+      clearInterval(polling);
+      pollingRef.current.delete(videoId);
+    }
+    const progress = progressRef.current.get(videoId);
+    if (progress) {
+      clearInterval(progress);
+      progressRef.current.delete(videoId);
+    }
+  };
+
   const checkVideoStatus = async (generationId: string, videoId: string, startTime: number) => {
     // Timeout after 5 minutes
-    if (Date.now() - startTime > 5 * 60 * 1000) {
+    if (Date.now() - startTime > MAX_GENERATION_TIME) {
       setVideos(prev => prev.map(v => 
         v.id === videoId 
-          ? { ...v, status: 'failed' }
+          ? { ...v, status: 'failed', errorMessage: 'استغرق التوليد وقتاً طويلاً' }
           : v
       ));
+      stopPolling(videoId);
       toast.error('استغرق التوليد وقتاً طويلاً، حاول مجدداً');
       return true;
     }
@@ -186,22 +207,37 @@ export default function VideoGeneratorPage() {
         timestamp: new Date(),
         status: 'generating',
         generationId: data.generationId,
+        progress: 0,
+        startTime: Date.now(),
       };
       
       setVideos(prev => [newVideo, ...prev]);
       setPrompt('');
       toast.success('بدأ توليد الفيديو! سيتم إكماله قريباً...');
 
+      // Start progress simulation
+      const progressInterval = setInterval(() => {
+        setVideos(prev => prev.map(v => {
+          if (v.id === newVideo.id && v.status === 'generating') {
+            const elapsed = Date.now() - (v.startTime || Date.now());
+            const estimatedProgress = Math.min(95, Math.floor((elapsed / MAX_GENERATION_TIME) * 100));
+            return { ...v, progress: estimatedProgress };
+          }
+          return v;
+        }));
+      }, 3000);
+      progressRef.current.set(newVideo.id, progressInterval);
+
       // Start polling for status with start time for timeout
       const startTime = Date.now();
       const pollInterval = setInterval(async () => {
         const isDone = await checkVideoStatus(data.generationId, newVideo.id, startTime);
         if (isDone) {
-          clearInterval(pollInterval);
+          stopPolling(newVideo.id);
         }
       }, 8000); // Check every 8 seconds
 
-      pollingRef.current = pollInterval;
+      pollingRef.current.set(newVideo.id, pollInterval);
 
     } catch (error) {
       console.error('Video generation error:', error);
@@ -325,16 +361,28 @@ export default function VideoGeneratorPage() {
                         alt={video.prompt}
                         className="w-full h-full object-cover"
                       />
-                      <div className="absolute inset-0 flex items-center justify-center bg-background/50">
+                      <div className="absolute inset-0 flex flex-col items-center justify-center bg-background/70 backdrop-blur-sm">
                         {video.status === 'generating' ? (
-                          <div className="text-center">
-                            <RefreshCw className="w-12 h-12 text-primary animate-spin mx-auto mb-2" />
-                            <p className="text-sm text-foreground">جاري التوليد...</p>
+                          <div className="text-center px-6 w-full">
+                            <RefreshCw className="w-10 h-10 text-primary animate-spin mx-auto mb-3" />
+                            <p className="text-sm font-medium text-foreground mb-2">جاري التوليد...</p>
+                            <div className="flex items-center gap-2 text-xs text-muted-foreground mb-3">
+                              <Clock className="w-3 h-3" />
+                              <span>قد يستغرق 2-4 دقائق</span>
+                            </div>
+                            <Progress value={video.progress || 0} className="h-2 w-full max-w-[200px] mx-auto" />
+                            <p className="text-xs text-muted-foreground mt-1">{video.progress || 0}%</p>
                           </div>
                         ) : video.status === 'failed' ? (
-                          <p className="text-sm text-destructive">فشل التوليد</p>
+                          <div className="text-center px-4">
+                            <AlertCircle className="w-10 h-10 text-destructive mx-auto mb-2" />
+                            <p className="text-sm text-destructive font-medium">فشل التوليد</p>
+                            {video.errorMessage && (
+                              <p className="text-xs text-muted-foreground mt-1">{video.errorMessage}</p>
+                            )}
+                          </div>
                         ) : (
-                          <button className="w-16 h-16 rounded-full bg-primary/90 flex items-center justify-center">
+                          <button className="w-16 h-16 rounded-full bg-primary/90 flex items-center justify-center shadow-lg shadow-primary/30">
                             <Play className="w-8 h-8 text-primary-foreground fill-current" />
                           </button>
                         )}
