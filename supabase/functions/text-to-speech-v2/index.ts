@@ -6,18 +6,105 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+type GenerateBody = {
+  action?: "generate";
+  text: string;
+  voice?: string;
+  speed?: number;
+};
+
+type CheckBody = {
+  action: "check";
+  audioUrl: string;
+};
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+async function tryFetchAudioBase64(audioUrl: string): Promise<
+  | { status: "completed"; audioData: string }
+  | { status: "pending" }
+> {
+  // The CDN object may not exist yet right after generation.
+  // Keep this short; client can poll if still pending.
+  const retryDelaysMs = [0, 700, 1500, 2500];
+  let lastStatus = 0;
+  let lastBody = "";
+
+  for (const d of retryDelaysMs) {
+    if (d) await sleep(d);
+
+    const resp = await fetch(audioUrl);
+    lastStatus = resp.status;
+
+    if (resp.ok) {
+      const audioBuffer = await resp.arrayBuffer();
+      const base64Audio = base64Encode(audioBuffer);
+      return { status: "completed", audioData: base64Audio };
+    }
+
+    // Not ready yet
+    if (resp.status === 404) {
+      lastBody = await resp.text().catch(() => "");
+      continue;
+    }
+
+    // Any other failure: stop early (auth/blocked/etc.)
+    lastBody = await resp.text().catch(() => "");
+    console.error("Audio fetch failed:", resp.status, lastBody);
+    break;
+  }
+
+  // If we repeatedly got 404, treat as pending.
+  if (lastStatus === 404) return { status: "pending" };
+
+  // Otherwise also treat as pending to avoid 500 loops; client can retry.
+  console.error("Audio not ready or fetch blocked:", lastStatus, lastBody);
+  return { status: "pending" };
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const { text, voice, speed } = await req.json();
+    const body = (await req.json()) as GenerateBody | CheckBody;
     const AIML_API_KEY = Deno.env.get("AIML_API_KEY");
 
     if (!AIML_API_KEY) {
       throw new Error("AIML_API_KEY is not configured");
     }
+
+    // --- CHECK ---
+    if ((body as CheckBody).action === "check") {
+      const { audioUrl } = body as CheckBody;
+      if (!audioUrl) {
+        return new Response(JSON.stringify({ error: "audioUrl مطلوب" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const fetched = await tryFetchAudioBase64(audioUrl);
+      if (fetched.status === "completed") {
+        return new Response(
+          JSON.stringify({
+            success: true,
+            status: "completed",
+            audioData: fetched.audioData,
+            format: "mp3",
+          }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      return new Response(JSON.stringify({ success: true, status: "pending" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // --- GENERATE ---
+    const { text, voice, speed } = body as GenerateBody;
 
     if (!text || text.trim().length === 0) {
       return new Response(JSON.stringify({ error: "النص مطلوب" }), {
@@ -26,7 +113,6 @@ serve(async (req) => {
       });
     }
 
-    // 1) Ask AIML to generate TTS and return a URL
     const ttsResp = await fetch("https://api.aimlapi.com/v1/tts", {
       method: "POST",
       headers: {
@@ -35,10 +121,10 @@ serve(async (req) => {
       },
       body: JSON.stringify({
         model: "openai/tts-1",
-        text: text,
+        text: text.trim(),
         voice: voice || "alloy",
-        // AIML follows OpenAI-compatible params; keep it optional
         speed: typeof speed === "number" ? speed : undefined,
+        response_format: "mp3",
       }),
     });
 
@@ -60,7 +146,7 @@ serve(async (req) => {
     }
 
     const ttsJson = await ttsResp.json();
-    const audioUrl = ttsJson.audio?.url;
+    const audioUrl = ttsJson.audio?.url as string | undefined;
 
     if (!audioUrl) {
       console.error("No audio URL in response:", JSON.stringify(ttsJson));
@@ -70,29 +156,28 @@ serve(async (req) => {
       });
     }
 
-    // 2) Fetch the audio bytes server-side and return base64 so browser playback always works
-    const audioResp = await fetch(audioUrl);
-    if (!audioResp.ok) {
-      const t = await audioResp.text();
-      console.error("Failed to fetch audio bytes:", audioResp.status, t);
-      return new Response(JSON.stringify({ error: "تعذر تحميل ملف الصوت" }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+    const fetched = await tryFetchAudioBase64(audioUrl);
+    if (fetched.status === "completed") {
+      return new Response(
+        JSON.stringify({
+          success: true,
+          status: "completed",
+          audioData: fetched.audioData,
+          format: "mp3",
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
 
-    const audioBuffer = await audioResp.arrayBuffer();
-    const base64Audio = base64Encode(audioBuffer);
-
+    // Not ready yet — return URL so client can poll.
     return new Response(
       JSON.stringify({
         success: true,
-        audioData: base64Audio,
+        status: "pending",
+        audioUrl,
         format: "mp3",
       }),
-      {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      }
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (e) {
     console.error("TTS v2 error:", e);

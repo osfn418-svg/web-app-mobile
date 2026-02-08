@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { 
   ArrowRight, 
@@ -21,7 +21,11 @@ interface GeneratedAudio {
   timestamp: Date;
   isPlaying: boolean;
   voice: string;
+  status: 'generating' | 'completed' | 'failed';
+  /** data:audio/... when completed */
   audioUrl: string;
+  /** AIML CDN url while generating */
+  remoteAudioUrl?: string;
 }
 
 const TTS_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/text-to-speech-v2`;
@@ -35,6 +39,15 @@ export default function TextToSpeechPage() {
   const [showSettings, setShowSettings] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [currentPlayingId, setCurrentPlayingId] = useState<string | null>(null);
+  const pollingRef = useRef<Record<string, number>>({});
+
+  useEffect(() => {
+    return () => {
+      Object.values(pollingRef.current).forEach((id) => window.clearInterval(id));
+      pollingRef.current = {};
+      if (audioRef.current) audioRef.current.pause();
+    };
+  }, []);
 
   const voices = [
     { id: 'alloy', label: 'Alloy', description: 'متوازن' },
@@ -45,11 +58,73 @@ export default function TextToSpeechPage() {
     { id: 'shimmer', label: 'Shimmer', description: 'ناعم' },
   ];
 
+  const startPolling = (audioId: string, remoteAudioUrl: string) => {
+    // Clear previous polling for this item (if any)
+    const existing = pollingRef.current[audioId];
+    if (existing) window.clearInterval(existing);
+
+    const startedAt = Date.now();
+    const intervalId = window.setInterval(async () => {
+      // Stop polling after 90s to avoid infinite loops
+      if (Date.now() - startedAt > 90_000) {
+        window.clearInterval(intervalId);
+        delete pollingRef.current[audioId];
+        setAudios((prev) => prev.map((a) => (a.id === audioId ? { ...a, status: 'failed' } : a)));
+        toast.error('استغرق تجهيز الصوت وقتاً طويلاً، حاول مرة أخرى');
+        return;
+      }
+
+      try {
+        const resp = await fetch(TTS_URL, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+          },
+          body: JSON.stringify({ action: 'check', audioUrl: remoteAudioUrl }),
+        });
+
+        if (!resp.ok) return;
+
+        const data = await resp.json();
+        if (!data?.success) return;
+
+        if (data.status === 'completed' && data.audioData) {
+          const audioUrl = `data:audio/mpeg;base64,${data.audioData}`;
+
+          setAudios((prev) =>
+            prev.map((a) =>
+              a.id === audioId
+                ? {
+                    ...a,
+                    status: 'completed',
+                    audioUrl,
+                    remoteAudioUrl: undefined,
+                  }
+                : a
+            )
+          );
+
+          window.clearInterval(intervalId);
+          delete pollingRef.current[audioId];
+          toast.success('تم إنشاء الصوت بنجاح!');
+        }
+      } catch {
+        // Silent retry; we'll keep polling.
+      }
+    }, 2000);
+
+    pollingRef.current[audioId] = intervalId;
+  };
+
   const generateSpeech = async () => {
     if (!text.trim() || loading) return;
-    
+
+    const requestText = text.trim();
+    const audioId = Date.now().toString();
+
     setLoading(true);
-    
+
     try {
       const response = await fetch(TTS_URL, {
         method: 'POST',
@@ -57,8 +132,9 @@ export default function TextToSpeechPage() {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
         },
-        body: JSON.stringify({ 
-          text: text.trim(),
+        body: JSON.stringify({
+          action: 'generate',
+          text: requestText,
           voice: selectedVoice,
           speed: speed,
         }),
@@ -74,44 +150,80 @@ export default function TextToSpeechPage() {
       }
 
       const data = await response.json();
-      
+
       if (!data.success) {
         throw new Error(data.error || 'Failed to generate speech');
       }
 
-      // Create audio URL from base64 data
-      const audioUrl = `data:audio/mpeg;base64,${data.audioData}`;
-      
-      const newAudio: GeneratedAudio = {
-        id: Date.now().toString(),
-        text: text.trim(),
-        timestamp: new Date(),
-        isPlaying: false,
-        voice: voices.find(v => v.id === selectedVoice)?.label || selectedVoice,
-        audioUrl: audioUrl,
-      };
-      
-      setAudios(prev => [newAudio, ...prev]);
-      setText('');
-      toast.success('تم إنشاء الصوت بنجاح!');
+      const voiceLabel = voices.find((v) => v.id === selectedVoice)?.label || selectedVoice;
+
+      if (data.status === 'completed' && data.audioData) {
+        const audioUrl = `data:audio/mpeg;base64,${data.audioData}`;
+
+        const newAudio: GeneratedAudio = {
+          id: audioId,
+          text: requestText,
+          timestamp: new Date(),
+          isPlaying: false,
+          voice: voiceLabel,
+          status: 'completed',
+          audioUrl,
+        };
+
+        setAudios((prev) => [newAudio, ...prev]);
+        setText('');
+        toast.success('تم إنشاء الصوت بنجاح!');
+        return;
+      }
+
+      if (data.status === 'pending' && data.audioUrl) {
+        const newAudio: GeneratedAudio = {
+          id: audioId,
+          text: requestText,
+          timestamp: new Date(),
+          isPlaying: false,
+          voice: voiceLabel,
+          status: 'generating',
+          audioUrl: '',
+          remoteAudioUrl: data.audioUrl,
+        };
+
+        setAudios((prev) => [newAudio, ...prev]);
+        setText('');
+        toast.message('جاري تجهيز الصوت...');
+
+        startPolling(audioId, data.audioUrl);
+        return;
+      }
+
+      throw new Error('Invalid TTS response');
     } catch (error) {
       console.error('TTS error:', error);
       toast.error('حدث خطأ أثناء إنشاء الصوت');
+
+      setAudios((prev) =>
+        prev.map((a) => (a.id === audioId ? { ...a, status: 'failed' } : a))
+      );
     } finally {
       setLoading(false);
     }
   };
 
   const playAudio = (audio: GeneratedAudio) => {
+    if (audio.status !== 'completed' || !audio.audioUrl) {
+      toast.message('الصوت قيد التجهيز...');
+      return;
+    }
+
     // Stop current audio if playing
     if (audioRef.current) {
       audioRef.current.pause();
       audioRef.current = null;
     }
-    
+
     if (currentPlayingId === audio.id) {
       setCurrentPlayingId(null);
-      setAudios(prev => prev.map(a => ({ ...a, isPlaying: false })));
+      setAudios((prev) => prev.map((a) => ({ ...a, isPlaying: false })));
       return;
     }
 
@@ -120,20 +232,22 @@ export default function TextToSpeechPage() {
 
     newAudio.onplay = () => {
       setCurrentPlayingId(audio.id);
-      setAudios(prev => prev.map(a => ({
-        ...a,
-        isPlaying: a.id === audio.id,
-      })));
+      setAudios((prev) =>
+        prev.map((a) => ({
+          ...a,
+          isPlaying: a.id === audio.id,
+        }))
+      );
     };
 
     newAudio.onended = () => {
       setCurrentPlayingId(null);
-      setAudios(prev => prev.map(a => ({ ...a, isPlaying: false })));
+      setAudios((prev) => prev.map((a) => ({ ...a, isPlaying: false })));
     };
 
     newAudio.onerror = () => {
       setCurrentPlayingId(null);
-      setAudios(prev => prev.map(a => ({ ...a, isPlaying: false })));
+      setAudios((prev) => prev.map((a) => ({ ...a, isPlaying: false })));
       toast.error('حدث خطأ أثناء تشغيل الصوت');
     };
 
@@ -141,6 +255,11 @@ export default function TextToSpeechPage() {
   };
 
   const downloadAudio = async (audio: GeneratedAudio) => {
+    if (audio.status !== 'completed' || !audio.audioUrl) {
+      toast.message('الصوت غير جاهز بعد');
+      return;
+    }
+
     try {
       // Data-URL audio (base64) — download directly
       if (audio.audioUrl.startsWith('data:')) {
@@ -172,12 +291,18 @@ export default function TextToSpeechPage() {
   };
 
   const deleteAudio = (id: string) => {
+    const pollId = pollingRef.current[id];
+    if (pollId) {
+      window.clearInterval(pollId);
+      delete pollingRef.current[id];
+    }
+
     if (currentPlayingId === id && audioRef.current) {
       audioRef.current.pause();
       audioRef.current = null;
       setCurrentPlayingId(null);
     }
-    setAudios(prev => prev.filter(a => a.id !== id));
+    setAudios((prev) => prev.filter((a) => a.id !== id));
     toast.success('تم حذف الصوت');
   };
 
