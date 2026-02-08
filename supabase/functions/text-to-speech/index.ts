@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { encode as base64Encode } from "https://deno.land/std@0.168.0/encoding/base64.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -12,10 +13,10 @@ serve(async (req) => {
 
   try {
     const { text, voice } = await req.json();
-    const AIML_API_KEY = Deno.env.get("AIML_API_KEY");
+    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     
-    if (!AIML_API_KEY) {
-      throw new Error("AIML_API_KEY is not configured");
+    if (!LOVABLE_API_KEY) {
+      throw new Error("LOVABLE_API_KEY is not configured");
     }
 
     if (!text || text.trim().length === 0) {
@@ -25,27 +26,37 @@ serve(async (req) => {
       });
     }
 
-    // Use OpenAI TTS model via AIML API
-    const response = await fetch("https://api.aimlapi.com/v1/tts", {
+    console.log("Generating TTS for text:", text.substring(0, 50) + "...");
+
+    // Use OpenAI TTS via Lovable AI Gateway
+    const response = await fetch("https://ai.gateway.lovable.dev/v1/audio/speech", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${AIML_API_KEY}`,
+        Authorization: `Bearer ${LOVABLE_API_KEY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
         model: "openai/tts-1",
-        text: text,
+        input: text,
         voice: voice || "alloy",
+        response_format: "mp3",
       }),
     });
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error("AIML TTS error:", response.status, errorText);
+      console.error("Lovable AI TTS error:", response.status, errorText);
       
       if (response.status === 429) {
         return new Response(JSON.stringify({ error: "تم تجاوز حد الاستخدام" }), {
           status: 429,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      
+      if (response.status === 402) {
+        return new Response(JSON.stringify({ error: "يرجى إضافة رصيد لحسابك" }), {
+          status: 402,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
@@ -56,21 +67,16 @@ serve(async (req) => {
       });
     }
 
-    // API returns JSON with audio URL
-    const data = await response.json();
-    const audioUrl = data.audio?.url;
+    // Response is binary audio data
+    const audioBuffer = await response.arrayBuffer();
+    console.log("Audio generated, size:", audioBuffer.byteLength, "bytes");
     
-    if (!audioUrl) {
-      console.error("No audio URL in response:", JSON.stringify(data));
-      return new Response(JSON.stringify({ error: "لم يتم استلام رابط الصوت" }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
+    // Convert to base64 for sending to client
+    const base64Audio = base64Encode(audioBuffer);
     
     return new Response(JSON.stringify({ 
       success: true,
-      audioUrl: audioUrl,
+      audioData: base64Audio,
       format: "mp3"
     }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
