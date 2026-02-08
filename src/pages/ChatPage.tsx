@@ -114,6 +114,7 @@ export default function ChatPage() {
           content: m.content
         })),
         toolType: tool.type,
+        model: selectedModel,
         onDelta: updateAssistant,
         onDone: async () => {
           setMessages(prev => 
@@ -182,6 +183,7 @@ export default function ChatPage() {
           content: m.content
         })),
         toolType: tool.type,
+        model: selectedModel,
         onDelta: updateAssistant,
         onDone: async () => {
           setMessages(prev => 
