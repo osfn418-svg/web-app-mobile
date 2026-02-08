@@ -6,10 +6,7 @@ import {
   Copy, 
   RefreshCw,
   Sparkles,
-  History,
-  Plus,
-  Trash2,
-  X
+  Plus
 } from 'lucide-react';
 import { Link, useParams } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
@@ -27,9 +24,9 @@ interface Message {
 
 const toolInfo: Record<string, { name: string; icon: string; type: string; dbId: string }> = {
   assistant: { name: 'الذكاء المساعد', icon: '🤖', type: 'assistant', dbId: 'ee7a12c4-d19f-4fb9-94f5-c66702b6e97c' },
-  code: { name: 'محرر الأكواد', icon: '💻', type: 'code', dbId: 'ee7a12c4-d19f-4fb9-94f5-c66702b6e97c' },
-  document: { name: 'محلل المستندات', icon: '📄', type: 'document', dbId: 'ee7a12c4-d19f-4fb9-94f5-c66702b6e97c' },
-  'prompt-maker': { name: 'صانع الأوامر', icon: '✨', type: 'prompt', dbId: 'ee7a12c4-d19f-4fb9-94f5-c66702b6e97c' },
+  code: { name: 'محرر الأكواد', icon: '💻', type: 'code', dbId: '0d101ac2-2b28-45f5-8564-c2ffd32000e1' },
+  document: { name: 'محلل المستندات', icon: '📄', type: 'document', dbId: '0c4d802c-4637-471c-b1dc-ae066d753f92' },
+  'prompt-maker': { name: 'صانع الأوامر', icon: '✨', type: 'prompt', dbId: '0dd67eec-a9ad-44e5-9f63-436503e03da5' },
 };
 
 export default function ChatPage() {
@@ -39,18 +36,14 @@ export default function ChatPage() {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [selectedModel, setSelectedModel] = useState('gemini-3');
-  const [showHistory, setShowHistory] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const tool = toolInfo[toolId || 'assistant'] || toolInfo.assistant;
   
   const {
     conversationId,
-    conversations,
     createConversation,
     saveMessage,
-    loadMessages,
-    deleteConversation,
     startNewChat,
     savedMessages,
   } = useChatPersistence(tool.dbId);
@@ -155,19 +148,8 @@ export default function ChatPage() {
       role: 'assistant',
       content: `مرحباً ${profile?.full_name || ''}! 👋 أنا ${tool.name}. كيف يمكنني مساعدتك اليوم؟`,
     }]);
-    setShowHistory(false);
   };
 
-  const handleLoadConversation = async (convId: string) => {
-    await loadMessages(convId);
-    setShowHistory(false);
-  };
-
-  const handleDeleteConversation = async (convId: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    await deleteConversation(convId);
-    toast.success('تم حذف المحادثة');
-  };
 
   const handleRegenerate = async (messageIndex: number) => {
     const previousMessages = messages.slice(0, messageIndex);
@@ -244,13 +226,6 @@ export default function ChatPage() {
           </div>
           <div className="flex items-center gap-2">
             <button
-              onClick={() => setShowHistory(!showHistory)}
-              className="p-2 hover:bg-muted rounded-xl transition-colors"
-              title="السجلات"
-            >
-              <History className="w-5 h-5 text-muted-foreground" />
-            </button>
-            <button
               onClick={handleNewChat}
               className="p-2 hover:bg-muted rounded-xl transition-colors"
               title="محادثة جديدة"
@@ -264,59 +239,6 @@ export default function ChatPage() {
           </div>
         </div>
       </header>
-
-      {/* History Sidebar */}
-      {showHistory && (
-        <motion.div
-          initial={{ opacity: 0, x: 100 }}
-          animate={{ opacity: 1, x: 0 }}
-          exit={{ opacity: 0, x: 100 }}
-          className="fixed inset-0 z-50 flex justify-end"
-        >
-          <div className="absolute inset-0 bg-black/50" onClick={() => setShowHistory(false)} />
-          <div className="relative w-80 max-w-full bg-card border-r border-border h-full overflow-y-auto">
-            <div className="sticky top-0 bg-card p-4 border-b border-border flex items-center justify-between">
-              <h2 className="font-semibold text-foreground">سجل المحادثات</h2>
-              <button onClick={() => setShowHistory(false)} className="p-2 hover:bg-muted rounded-lg">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <div className="p-4 space-y-2">
-              {conversations.length === 0 ? (
-                <p className="text-center text-muted-foreground py-8">لا توجد محادثات سابقة</p>
-              ) : (
-                conversations.map((conv) => (
-                  <motion.div
-                    key={conv.id}
-                    whileHover={{ scale: 1.02 }}
-                    onClick={() => handleLoadConversation(conv.id)}
-                    className={`p-3 rounded-xl cursor-pointer transition-colors group ${
-                      conversationId === conv.id ? 'bg-primary/20' : 'bg-muted hover:bg-muted/80'
-                    }`}
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-foreground truncate">
-                          {conv.title || 'محادثة بدون عنوان'}
-                        </p>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          {new Date(conv.created_at).toLocaleDateString('ar-SA')}
-                        </p>
-                      </div>
-                      <button
-                        onClick={(e) => handleDeleteConversation(conv.id, e)}
-                        className="p-1.5 hover:bg-destructive/20 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity"
-                      >
-                        <Trash2 className="w-4 h-4 text-destructive" />
-                      </button>
-                    </div>
-                  </motion.div>
-                ))
-              )}
-            </div>
-          </div>
-        </motion.div>
-      )}
 
       {/* Messages */}
       <main className="flex-1 overflow-y-auto px-4 py-4 space-y-4">

@@ -31,6 +31,7 @@ export function useChatPersistence(toolId: string) {
       const { data, error } = await supabase
         .from('chat_conversations')
         .select('*')
+        .eq('user_id', user.id)
         .eq('tool_id', toolId)
         .order('updated_at', { ascending: false });
 
@@ -108,15 +109,19 @@ export function useChatPersistence(toolId: string) {
       if (error) throw error;
 
       // Update conversation's updated_at
-      await supabase
+      const { error: updateError } = await supabase
         .from('chat_conversations')
         .update({ updated_at: new Date().toISOString() })
         .eq('id', convId);
 
+      if (updateError) throw updateError;
+
+      // Refresh list so "recent" and history update immediately
+      await loadConversations();
     } catch (error) {
       console.error('Error saving message:', error);
     }
-  }, []);
+  }, [loadConversations]);
 
   // Delete a conversation
   const deleteConversation = useCallback(async (convId: string) => {
