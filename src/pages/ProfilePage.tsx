@@ -12,6 +12,7 @@ import {
   Crown
 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
+import { Settings2 } from 'lucide-react';
 import MobileLayout from '@/components/layout/MobileLayout';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
@@ -27,6 +28,12 @@ export default function ProfilePage() {
   };
 
   const menuItems = [
+    { 
+      title: 'إدارة', 
+      items: user?.role === 'admin' ? [
+        { icon: Settings2, label: 'لوحة التحكم', href: '/admin' },
+      ] : []
+    },
     { 
       title: 'الأمان', 
       items: [
@@ -49,7 +56,7 @@ export default function ProfilePage() {
         { icon: Shield, label: 'سياسة الخصوصية', href: '#' },
       ]
     },
-  ];
+  ].filter(section => section.items.length > 0);
 
   return (
     <MobileLayout>

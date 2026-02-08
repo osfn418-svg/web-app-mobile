@@ -332,7 +332,9 @@ export async function getSubscriptionPlan(planId: number): Promise<SubscriptionP
 }
 
 export async function getAllTools(): Promise<AITool[]> {
-  return await db.ai_tools.where('approved').equals(1).toArray();
+  // Get all approved tools - Dexie stores booleans as 0/1
+  const tools = await db.ai_tools.toArray();
+  return tools.filter(t => t.approved === true);
 }
 
 export async function getToolsByCategory(categoryId: number): Promise<AITool[]> {
