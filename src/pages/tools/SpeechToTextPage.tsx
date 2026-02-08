@@ -1,14 +1,12 @@
-import { useRef, useState } from 'react';
+import { useRef, useState, useCallback, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { 
   ArrowRight, 
   Mic,
   MicOff,
-  Upload,
   Copy,
   Trash2,
   Loader2,
-  FileAudio
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
@@ -18,128 +16,120 @@ interface Transcription {
   text: string;
   timestamp: Date;
   language: string;
-  source: 'recording' | 'upload';
 }
-
-const STT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/speech-to-text`;
 
 export default function SpeechToTextPage() {
   const [transcriptions, setTranscriptions] = useState<Transcription[]>([]);
   const [isRecording, setIsRecording] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [selectedLanguage, setSelectedLanguage] = useState('ar');
+  const [selectedLanguage, setSelectedLanguage] = useState('ar-SA');
+  const [liveTranscript, setLiveTranscript] = useState('');
   
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const chunksRef = useRef<Blob[]>([]);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const recognitionRef = useRef<any>(null);
 
   const languages = [
-    { code: 'ar', label: 'العربية' },
-    { code: 'en', label: 'English' },
-    { code: 'fr', label: 'Français' },
-    { code: 'es', label: 'Español' },
+    { code: 'ar-SA', label: 'العربية' },
+    { code: 'en-US', label: 'English' },
+    { code: 'fr-FR', label: 'Français' },
+    { code: 'es-ES', label: 'Español' },
   ];
 
-  const transcribeAudio = async (audioBlob: Blob, source: 'recording' | 'upload') => {
-    setIsProcessing(true);
-    
-    try {
-      const formData = new FormData();
-      formData.append('audio', audioBlob, 'audio.webm');
-      formData.append('language', selectedLanguage);
+  // Check browser support
+  const isSupported = typeof window !== 'undefined' && 
+    ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window);
 
-      const response = await fetch(STT_URL, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-        },
-        body: formData,
-      });
-
-      if (response.status === 429) {
-        toast.error('تم تجاوز حد الاستخدام، يرجى المحاولة لاحقاً');
-        return;
+  useEffect(() => {
+    return () => {
+      if (recognitionRef.current) {
+        recognitionRef.current.stop();
       }
+    };
+  }, []);
 
-      if (!response.ok) {
-        throw new Error('Failed to transcribe audio');
-      }
-
-      const data = await response.json();
-
-      if (!data.success || !data.text) {
-        throw new Error(data.error || 'No transcription received');
-      }
-
-      const newTranscription: Transcription = {
-        id: Date.now().toString(),
-        text: data.text,
-        timestamp: new Date(),
-        language: languages.find(l => l.code === selectedLanguage)?.label || selectedLanguage,
-        source,
-      };
-
-      setTranscriptions(prev => [newTranscription, ...prev]);
-      toast.success('تم تحويل الصوت إلى نص بنجاح!');
-    } catch (error) {
-      console.error('STT error:', error);
-      toast.error('حدث خطأ أثناء تحويل الصوت');
-    } finally {
-      setIsProcessing(false);
-    }
-  };
-
-  const startRecording = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mediaRecorder = new MediaRecorder(stream);
-      mediaRecorderRef.current = mediaRecorder;
-      chunksRef.current = [];
-
-      mediaRecorder.ondataavailable = (e) => {
-        if (e.data.size > 0) {
-          chunksRef.current.push(e.data);
-        }
-      };
-
-      mediaRecorder.onstop = async () => {
-        const audioBlob = new Blob(chunksRef.current, { type: 'audio/webm' });
-        stream.getTracks().forEach(track => track.stop());
-        await transcribeAudio(audioBlob, 'recording');
-      };
-
-      mediaRecorder.start();
-      setIsRecording(true);
-      toast.message('جاري التسجيل... اضغط مرة أخرى للإيقاف');
-    } catch (error) {
-      console.error('Recording error:', error);
-      toast.error('فشل في بدء التسجيل. تأكد من إعطاء صلاحية الميكروفون');
-    }
-  };
-
-  const stopRecording = () => {
-    if (mediaRecorderRef.current && isRecording) {
-      mediaRecorderRef.current.stop();
-      setIsRecording(false);
-    }
-  };
-
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    if (!file.type.startsWith('audio/')) {
-      toast.error('يرجى اختيار ملف صوتي');
+  const startRecording = useCallback(() => {
+    if (!isSupported) {
+      toast.error('المتصفح لا يدعم التعرف على الصوت');
       return;
     }
 
-    await transcribeAudio(file, 'upload');
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const recognition = new SpeechRecognition();
     
-    // Reset file input
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
+    recognition.lang = selectedLanguage;
+    recognition.continuous = true;
+    recognition.interimResults = true;
+
+    recognition.onstart = () => {
+      setIsRecording(true);
+      setLiveTranscript('');
+      toast.message('جاري التسجيل... تحدث الآن');
+    };
+
+    recognition.onresult = (event) => {
+      let interimTranscript = '';
+      let finalTranscript = '';
+
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const transcript = event.results[i][0].transcript;
+        if (event.results[i].isFinal) {
+          finalTranscript += transcript;
+        } else {
+          interimTranscript += transcript;
+        }
+      }
+
+      setLiveTranscript(interimTranscript || finalTranscript);
+
+      if (finalTranscript) {
+        const newTranscription: Transcription = {
+          id: Date.now().toString(),
+          text: finalTranscript,
+          timestamp: new Date(),
+          language: languages.find(l => l.code === selectedLanguage)?.label || selectedLanguage,
+        };
+        setTranscriptions(prev => [newTranscription, ...prev]);
+        setLiveTranscript('');
+      }
+    };
+
+    recognition.onerror = (event) => {
+      console.error('Speech recognition error:', event.error);
+      if (event.error === 'not-allowed') {
+        toast.error('يرجى السماح بالوصول للميكروفون');
+      } else if (event.error === 'no-speech') {
+        toast.message('لم يتم اكتشاف صوت');
+      } else {
+        toast.error('حدث خطأ في التعرف على الصوت');
+      }
+      setIsRecording(false);
+      setIsProcessing(false);
+    };
+
+    recognition.onend = () => {
+      setIsRecording(false);
+      setIsProcessing(false);
+      if (liveTranscript) {
+        const newTranscription: Transcription = {
+          id: Date.now().toString(),
+          text: liveTranscript,
+          timestamp: new Date(),
+          language: languages.find(l => l.code === selectedLanguage)?.label || selectedLanguage,
+        };
+        setTranscriptions(prev => [newTranscription, ...prev]);
+        setLiveTranscript('');
+      }
+    };
+
+    recognitionRef.current = recognition;
+    recognition.start();
+  }, [isSupported, selectedLanguage, liveTranscript]);
+
+  const stopRecording = useCallback(() => {
+    if (recognitionRef.current) {
+      setIsProcessing(true);
+      recognitionRef.current.stop();
     }
-  };
+  }, []);
 
   const copyText = (text: string) => {
     navigator.clipboard.writeText(text);
@@ -149,6 +139,12 @@ export default function SpeechToTextPage() {
   const deleteTranscription = (id: string) => {
     setTranscriptions(prev => prev.filter(t => t.id !== id));
     toast.success('تم حذف النص');
+  };
+
+  const copyAllText = () => {
+    const allText = transcriptions.map(t => t.text).join('\n\n');
+    navigator.clipboard.writeText(allText);
+    toast.success('تم نسخ جميع النصوص');
   };
 
   return (
@@ -167,10 +163,19 @@ export default function SpeechToTextPage() {
               <h1 className="font-semibold text-foreground">تحويل الصوت إلى نص</h1>
               <p className="text-xs text-success flex items-center gap-1">
                 <span className="w-2 h-2 bg-success rounded-full pulse-dot"></span>
-                متصل بـ AI حقيقي
+                تعرف صوتي مباشر
               </p>
             </div>
           </div>
+          {transcriptions.length > 0 && (
+            <button
+              onClick={copyAllText}
+              className="p-2 hover:bg-muted rounded-xl transition-colors"
+              title="نسخ الكل"
+            >
+              <Copy className="w-5 h-5 text-muted-foreground" />
+            </button>
+          )}
         </div>
       </header>
 
@@ -182,7 +187,8 @@ export default function SpeechToTextPage() {
             <button
               key={lang.code}
               onClick={() => setSelectedLanguage(lang.code)}
-              className={`px-3 py-1.5 rounded-lg text-sm transition-colors ${
+              disabled={isRecording}
+              className={`px-3 py-1.5 rounded-lg text-sm transition-colors disabled:opacity-50 ${
                 selectedLanguage === lang.code
                   ? 'bg-primary text-primary-foreground'
                   : 'bg-muted text-muted-foreground hover:bg-muted/80'
@@ -194,36 +200,47 @@ export default function SpeechToTextPage() {
         </div>
       </div>
 
+      {/* Live Transcript */}
+      {(isRecording || liveTranscript) && (
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="px-4 py-3 bg-primary/10 border-b border-primary/20"
+        >
+          <div className="flex items-center gap-2 mb-2">
+            <span className="w-2 h-2 bg-destructive rounded-full animate-pulse" />
+            <span className="text-sm text-primary font-medium">جاري التسجيل...</span>
+          </div>
+          {liveTranscript && (
+            <p className="text-foreground">{liveTranscript}</p>
+          )}
+        </motion.div>
+      )}
+
       {/* Transcriptions */}
       <main className="flex-1 overflow-y-auto px-4 py-4">
-        {transcriptions.length === 0 && !isProcessing ? (
+        {!isSupported ? (
+          <div className="flex flex-col items-center justify-center h-64 text-center">
+            <div className="w-20 h-20 rounded-2xl bg-destructive/20 flex items-center justify-center text-4xl mb-4">
+              ⚠️
+            </div>
+            <h3 className="text-lg font-semibold text-foreground mb-2">المتصفح غير مدعوم</h3>
+            <p className="text-sm text-muted-foreground max-w-xs">
+              يرجى استخدام متصفح Chrome أو Edge أو Safari للاستفادة من ميزة التعرف على الصوت
+            </p>
+          </div>
+        ) : transcriptions.length === 0 && !isRecording ? (
           <div className="flex flex-col items-center justify-center h-64 text-center">
             <div className="w-20 h-20 rounded-2xl bg-muted flex items-center justify-center text-4xl mb-4">
               🎤
             </div>
             <h3 className="text-lg font-semibold text-foreground mb-2">حوّل الصوت إلى نص</h3>
             <p className="text-sm text-muted-foreground max-w-xs">
-              سجّل صوتك أو ارفع ملف صوتي وسيتم تحويله إلى نص مكتوب
+              اضغط على زر الميكروفون وابدأ بالتحدث، سيتم تحويل كلامك إلى نص مكتوب في الوقت الفعلي
             </p>
           </div>
         ) : (
           <div className="space-y-3">
-            {isProcessing && (
-              <motion.div
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="glass-card rounded-2xl p-4"
-              >
-                <div className="flex items-center gap-4">
-                  <div className="w-14 h-14 rounded-xl bg-primary/20 flex items-center justify-center">
-                    <Loader2 className="w-6 h-6 text-primary animate-spin" />
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-sm text-foreground">جاري تحويل الصوت إلى نص...</p>
-                  </div>
-                </div>
-              </motion.div>
-            )}
             {transcriptions.map((item, index) => (
               <motion.div
                 key={item.id}
@@ -236,9 +253,6 @@ export default function SpeechToTextPage() {
                   <div className="flex items-center gap-2">
                     <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded">
                       {item.language}
-                    </span>
-                    <span className="text-xs text-muted-foreground">
-                      {item.source === 'recording' ? '🎙️ تسجيل' : '📁 ملف'}
                     </span>
                   </div>
                   <div className="flex gap-1">
@@ -267,49 +281,32 @@ export default function SpeechToTextPage() {
 
       {/* Controls */}
       <footer className="glass sticky bottom-0 px-4 py-4 safe-bottom">
-        <div className="flex items-center justify-center gap-4">
-          {/* File Upload */}
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="audio/*"
-            onChange={handleFileUpload}
-            className="hidden"
-          />
-          <motion.button
-            whileTap={{ scale: 0.95 }}
-            onClick={() => fileInputRef.current?.click()}
-            disabled={isRecording || isProcessing}
-            className="p-4 bg-muted text-muted-foreground rounded-xl disabled:opacity-50"
-          >
-            <Upload className="w-6 h-6" />
-          </motion.button>
-
-          {/* Record Button */}
+        <div className="flex items-center justify-center">
           <motion.button
             whileTap={{ scale: 0.95 }}
             onClick={isRecording ? stopRecording : startRecording}
-            disabled={isProcessing}
+            disabled={isProcessing || !isSupported}
             className={`w-20 h-20 rounded-full flex items-center justify-center transition-colors ${
               isRecording
                 ? 'bg-destructive text-destructive-foreground animate-pulse'
                 : 'bg-primary text-primary-foreground'
             } disabled:opacity-50`}
           >
-            {isRecording ? (
+            {isProcessing ? (
+              <Loader2 className="w-8 h-8 animate-spin" />
+            ) : isRecording ? (
               <MicOff className="w-8 h-8" />
             ) : (
               <Mic className="w-8 h-8" />
             )}
           </motion.button>
-
-          {/* Placeholder for symmetry */}
-          <div className="w-14 h-14" />
         </div>
         <p className="text-center text-xs text-muted-foreground mt-3">
-          {isRecording ? 'اضغط لإيقاف التسجيل' : 'اضغط للتسجيل أو ارفع ملف صوتي'}
+          {isRecording ? 'اضغط لإيقاف التسجيل' : 'اضغط للتسجيل'}
         </p>
       </footer>
     </div>
   );
 }
+
+export {};
