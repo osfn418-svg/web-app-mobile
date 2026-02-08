@@ -124,25 +124,55 @@ export function useAllProfiles() {
   const [data, setData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  
+
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
-      const { data: profiles, error: fetchError } = await supabase
-        .from('profiles')
-        .select('*, user_roles(role), user_subscriptions(*, subscription_plans(*))')
-        .order('created_at', { ascending: false });
-      
-      if (fetchError) {
-        console.error('Error fetching profiles:', fetchError);
-        setError(fetchError.message);
-      } else {
-        setData(profiles || []);
-        setError(null);
+
+      // NOTE: لا توجد علاقات (FK) معرفة بين profiles وبين user_roles/user_subscriptions
+      // لذلك لا نستخدم embedded select (JOIN) هنا، ونقوم بالدمج في الكود.
+      const [{ data: profiles, error: profilesError }, { data: roles, error: rolesError }, { data: subs, error: subsError }] =
+        await Promise.all([
+          supabase.from('profiles').select('*').order('created_at', { ascending: false }),
+          supabase.from('user_roles').select('user_id, role'),
+          supabase
+            .from('user_subscriptions')
+            .select('*, subscription_plans(*)')
+            .order('created_at', { ascending: false }),
+        ]);
+
+      const firstError = profilesError || rolesError || subsError;
+      if (firstError) {
+        console.error('Error fetching admin users data:', firstError);
+        setError(firstError.message);
+        setData([]);
+        return;
       }
+
+      const rolesByUser = new Map<string, any[]>();
+      (roles || []).forEach((r: any) => {
+        const key = r.user_id;
+        rolesByUser.set(key, [...(rolesByUser.get(key) || []), r]);
+      });
+
+      const subsByUser = new Map<string, any[]>();
+      (subs || []).forEach((s: any) => {
+        const key = s.user_id;
+        subsByUser.set(key, [...(subsByUser.get(key) || []), s]);
+      });
+
+      const merged = (profiles || []).map((p: any) => ({
+        ...p,
+        user_roles: rolesByUser.get(p.user_id) || [],
+        user_subscriptions: subsByUser.get(p.user_id) || [],
+      }));
+
+      setData(merged);
+      setError(null);
     } catch (err) {
       console.error('Error in useAllProfiles:', err);
       setError(err instanceof Error ? err.message : 'Unknown error');
+      setData([]);
     } finally {
       setLoading(false);
     }
@@ -152,11 +182,15 @@ export function useAllProfiles() {
     fetchData();
 
     const channel = supabase
-      .channel('admin-profiles')
+      .channel('admin-users')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, fetchData)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'user_roles' }, fetchData)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'user_subscriptions' }, fetchData)
       .subscribe();
 
-    return () => { supabase.removeChannel(channel); };
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [fetchData]);
 
   return { data, loading, error, refetch: fetchData };

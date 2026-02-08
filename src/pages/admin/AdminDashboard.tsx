@@ -83,7 +83,7 @@ export default function AdminDashboard() {
 
 // Users Tab
 function UsersTab() {
-  const { data: users, loading, refetch } = useAllProfiles();
+  const { data: users, loading, error, refetch } = useAllProfiles();
   const { data: plans } = useAdminPlans();
   const [selectedUser, setSelectedUser] = useState<any>(null);
   const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
@@ -153,6 +153,13 @@ function UsersTab() {
     return <div className="text-center py-8 text-muted-foreground">جاري التحميل...</div>;
   }
 
+  if (error) {
+    return (
+      <div className="text-center py-8 text-destructive">
+        فشل تحميل المستخدمين: {error}
+      </div>
+    );
+  }
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
