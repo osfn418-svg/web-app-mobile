@@ -24,9 +24,12 @@ interface GeneratedAudio {
   status: 'generating' | 'completed' | 'failed';
   audioUrl: string | null;
   generationId?: string;
+  startTime?: number;
+  errorMessage?: string;
 }
 
 const MUSIC_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-music`;
+const MAX_GENERATION_TIME = 4 * 60 * 1000; // 4 minutes
 
 export default function AudioGeneratorPage() {
   const { isPro } = useAuth();
@@ -35,7 +38,7 @@ export default function AudioGeneratorPage() {
   const [audios, setAudios] = useState<GeneratedAudio[]>([]);
   const [genre, setGenre] = useState('ambient');
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const pollingRef = useRef<NodeJS.Timeout | null>(null);
+  const pollingRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
 
   const genres = [
     { id: 'ambient', label: 'أمبينت', emoji: '🌊' },
@@ -47,16 +50,35 @@ export default function AudioGeneratorPage() {
   // Cleanup on unmount
   useEffect(() => {
     return () => {
-      if (pollingRef.current) {
-        clearInterval(pollingRef.current);
-      }
+      pollingRef.current.forEach((t) => clearInterval(t));
+      pollingRef.current.clear();
       if (audioRef.current) {
         audioRef.current.pause();
       }
     };
   }, []);
 
-  const checkAudioStatus = async (generationId: string, audioId: string) => {
+  const stopPolling = (audioId: string) => {
+    const t = pollingRef.current.get(audioId);
+    if (t) {
+      clearInterval(t);
+      pollingRef.current.delete(audioId);
+    }
+  };
+
+  const checkAudioStatus = async (generationId: string, audioId: string, startTime: number) => {
+    // Timeout after 4 minutes
+    if (Date.now() - startTime > MAX_GENERATION_TIME) {
+      setAudios((prev) =>
+        prev.map((a) =>
+          a.id === audioId ? { ...a, status: 'failed', errorMessage: 'استغرق التوليد وقتاً طويلاً' } : a
+        )
+      );
+      stopPolling(audioId);
+      toast.error('استغرق توليد الموسيقى وقتاً طويلاً، حاول مجدداً');
+      return true;
+    }
+
     try {
       const response = await fetch(MUSIC_URL, {
         method: 'POST',
@@ -64,44 +86,73 @@ export default function AudioGeneratorPage() {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
         },
-        body: JSON.stringify({ 
+        body: JSON.stringify({
           action: 'check',
           generationId,
         }),
       });
 
+      if (response.status === 429) {
+        toast.error('تم تجاوز حد الاستخدام، يرجى المحاولة لاحقاً');
+        setAudios((prev) => prev.map((a) => (a.id === audioId ? { ...a, status: 'failed' } : a)));
+        return true;
+      }
+
+      if (response.status === 402) {
+        toast.error('يرجى إضافة رصيد ثم المحاولة مجدداً');
+        setAudios((prev) => prev.map((a) => (a.id === audioId ? { ...a, status: 'failed' } : a)));
+        return true;
+      }
+
+      if (response.status === 403) {
+        toast.error('تم الوصول لحد الخدمة (403) — يلزم تحديث مفتاح الخدمة/زيادة الحصة');
+        setAudios((prev) => prev.map((a) => (a.id === audioId ? { ...a, status: 'failed' } : a)));
+        return true;
+      }
+
+      if (response.status === 401) {
+        toast.error('غير مصرح (401) — تحقق من إعدادات الخدمة');
+        setAudios((prev) => prev.map((a) => (a.id === audioId ? { ...a, status: 'failed' } : a)));
+        return true;
+      }
+
+      if (!response.ok) {
+        const errText = await response.text().catch(() => '');
+        console.error('Music status check failed:', response.status, errText);
+        setAudios((prev) => prev.map((a) => (a.id === audioId ? { ...a, status: 'failed' } : a)));
+        toast.error('تعذر التحقق من حالة الموسيقى');
+        return true;
+      }
+
       const data = await response.json();
-      
+
       if (data.status === 'completed' && data.audio_url) {
-        setAudios(prev => prev.map(a => 
-          a.id === audioId 
-            ? { ...a, status: 'completed', audioUrl: data.audio_url }
-            : a
-        ));
+        setAudios((prev) =>
+          prev.map((a) => (a.id === audioId ? { ...a, status: 'completed', audioUrl: data.audio_url } : a))
+        );
         toast.success('تم الانتهاء من توليد الموسيقى!');
         return true;
-      } else if (data.status === 'failed') {
-        setAudios(prev => prev.map(a => 
-          a.id === audioId 
-            ? { ...a, status: 'failed' }
-            : a
-        ));
+      }
+
+      if (data.status === 'failed' || data.status === 'error') {
+        setAudios((prev) => prev.map((a) => (a.id === audioId ? { ...a, status: 'failed' } : a)));
         toast.error('فشل في توليد الموسيقى');
         return true;
       }
-      
+
       return false;
     } catch (error) {
       console.error('Status check error:', error);
+      // Network glitch: keep polling
       return false;
     }
   };
 
   const generateAudio = async () => {
     if (!prompt.trim() || loading) return;
-    
+
     setLoading(true);
-    
+
     try {
       const response = await fetch(MUSIC_URL, {
         method: 'POST',
@@ -109,7 +160,7 @@ export default function AudioGeneratorPage() {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
         },
-        body: JSON.stringify({ 
+        body: JSON.stringify({
           prompt,
           genre,
           duration: 30,
@@ -121,18 +172,36 @@ export default function AudioGeneratorPage() {
         return;
       }
 
+      if (response.status === 402) {
+        toast.error('يرجى إضافة رصيد ثم المحاولة مجدداً');
+        return;
+      }
+
+      if (response.status === 403) {
+        toast.error('تم الوصول لحد الخدمة (403) — يلزم تحديث مفتاح الخدمة/زيادة الحصة');
+        return;
+      }
+
+      if (response.status === 401) {
+        toast.error('غير مصرح (401) — تحقق من إعدادات الخدمة');
+        return;
+      }
+
       if (!response.ok) {
-        throw new Error('Failed to generate audio');
+        const errText = await response.text().catch(() => '');
+        throw new Error(errText || 'Failed to generate audio');
       }
 
       const data = await response.json();
-      
-      if (!data.success) {
+
+      if (!data.success || !data.generationId) {
         throw new Error(data.error || 'Failed to generate audio');
       }
 
+      const now = Date.now();
+
       const newAudio: GeneratedAudio = {
-        id: Date.now().toString(),
+        id: now.toString(),
         prompt: prompt,
         duration: '0:30',
         timestamp: new Date(),
@@ -140,22 +209,19 @@ export default function AudioGeneratorPage() {
         status: 'generating',
         audioUrl: null,
         generationId: data.generationId,
+        startTime: now,
       };
-      
-      setAudios(prev => [newAudio, ...prev]);
-      setPrompt('');
-      toast.success('بدأ توليد الموسيقى! سيتم إكمالها قريباً...');
 
-      // Start polling for status
+      setAudios((prev) => [newAudio, ...prev]);
+      setPrompt('');
+      toast.message('بدأ توليد الموسيقى...');
+
       const pollInterval = setInterval(async () => {
-        const isDone = await checkAudioStatus(data.generationId, newAudio.id);
-        if (isDone) {
-          clearInterval(pollInterval);
-        }
+        const isDone = await checkAudioStatus(data.generationId, newAudio.id, now);
+        if (isDone) stopPolling(newAudio.id);
       }, 10000);
 
-      pollingRef.current = pollInterval;
-
+      pollingRef.current.set(newAudio.id, pollInterval);
     } catch (error) {
       console.error('Audio generation error:', error);
       toast.error('حدث خطأ أثناء توليد الصوت');

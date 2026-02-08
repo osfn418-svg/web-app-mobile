@@ -46,23 +46,29 @@ export default function DocumentAnalyzerPage() {
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
-    if (selectedFile) {
-      // Check file type - only text files for now
-      if (!selectedFile.type.includes('text') && !selectedFile.name.endsWith('.txt')) {
-        toast.error('حالياً يدعم الملفات النصية فقط (.txt)');
-        return;
-      }
-      if (selectedFile.size > 1024 * 1024) {
-        toast.error('الحد الأقصى للملف 1 ميجابايت');
-        return;
-      }
-      setFile(selectedFile);
-      try {
-        const text = await readFileAsText(selectedFile);
-        setDocumentText(text);
-      } catch {
-        toast.error('فشل قراءة الملف');
-      }
+    if (!selectedFile) return;
+
+    const fileName = selectedFile.name.toLowerCase();
+    const isTxt = selectedFile.type.includes('text') || fileName.endsWith('.txt');
+    const isPdf = selectedFile.type === 'application/pdf' || fileName.endsWith('.pdf');
+
+    if (!isTxt && !isPdf) {
+      toast.error('حالياً يدعم ملفات TXT و PDF فقط');
+      return;
+    }
+
+    const maxSize = isPdf ? 10 * 1024 * 1024 : 1024 * 1024;
+    if (selectedFile.size > maxSize) {
+      toast.error(isPdf ? 'الحد الأقصى لملف PDF هو 10 ميجابايت' : 'الحد الأقصى لملف TXT هو 1 ميجابايت');
+      return;
+    }
+
+    setFile(selectedFile);
+    try {
+      const text = await readFileAsText(selectedFile);
+      setDocumentText(text);
+    } catch {
+      toast.error('فشل قراءة الملف');
     }
   };
 
@@ -126,30 +132,35 @@ export default function DocumentAnalyzerPage() {
   const handleSend = async () => {
     if (!input.trim() || loading) return;
 
+    const question = input;
+
     const userMessage: Message = {
       id: Date.now().toString(),
       role: 'user',
-      content: input,
+      content: question,
     };
 
-    setMessages(prev => [...prev, userMessage]);
+    const assistantId = (Date.now() + 1).toString();
+
+    // Add both messages in one update (avoid race)
+    setMessages((prev) => [...prev, userMessage, { id: assistantId, role: 'assistant', content: '' }]);
     setInput('');
     setLoading(true);
 
-    const assistantId = (Date.now() + 1).toString();
-    setMessages(prev => [...prev, { id: assistantId, role: 'assistant', content: '' }]);
+    // Important: include the latest user message in the history we send to backend
+    const outgoingMessages = [...messages, userMessage].filter((m) => m.content.trim());
 
     try {
       await streamDocumentAnalysis({
         action: 'chat',
         documentText,
-        question: input,
-        messages: messages.filter(m => m.content.trim()),
+        question,
+        messages: outgoingMessages,
         onDelta: (delta) => {
-          setMessages(prev => {
+          setMessages((prev) => {
             const last = prev[prev.length - 1];
             if (last?.role === 'assistant') {
-              return prev.map((m, i) => 
+              return prev.map((m, i) =>
                 i === prev.length - 1 ? { ...m, content: m.content + delta } : m
               );
             }
@@ -261,7 +272,7 @@ export default function DocumentAnalyzerPage() {
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept=".txt"
+                  accept=".txt,.pdf,application/pdf"
                   onChange={handleFileSelect}
                   className="hidden"
                 />
@@ -275,12 +286,12 @@ export default function DocumentAnalyzerPage() {
                       <Upload className="w-8 h-8 text-primary" />
                     </div>
                     <div className="text-center">
-                      <h3 className="text-base font-semibold text-foreground mb-1">ارفع ملف نصي</h3>
+                      <h3 className="text-base font-semibold text-foreground mb-1">ارفع ملف</h3>
                       <p className="text-sm text-muted-foreground">
-                        ملفات .txt فقط حالياً
+                        ملفات .txt و PDF
                       </p>
                       <p className="text-xs text-muted-foreground mt-1">
-                        الحد الأقصى: 1 ميجابايت
+                        PDF: حتى 10MB • TXT: حتى 1MB
                       </p>
                     </div>
                   </button>

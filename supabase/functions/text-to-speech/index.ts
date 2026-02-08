@@ -116,6 +116,7 @@ serve(async (req) => {
           JSON.stringify({
             success: true,
             status: "completed",
+            audioUrl,
             audioData: fetched.audioData,
             format: "mp3",
           }),
@@ -208,6 +209,7 @@ serve(async (req) => {
         JSON.stringify({
           success: true,
           status: "completed",
+          audioUrl,
           audioData: fetched.audioData,
           format: "mp3",
         }),

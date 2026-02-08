@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef } from "react";
 
 type CheckResponse =
-  | { success: true; status: "pending"; lastHttpStatus?: number }
-  | { success: true; status: "completed"; audioData: string; format: "mp3" }
+  | { success: true; status: "pending"; lastHttpStatus?: number; audioUrl?: string }
+  | { success: true; status: "completed"; audioData?: string; audioUrl?: string; format: "mp3" }
   | { success: true; status: "failed"; error?: string; httpStatus?: number; details?: string }
   | { error: string };
 
@@ -76,10 +76,18 @@ export function useTtsPolling({
 
         const data = (await resp.json()) as CheckResponse;
 
-        if ((data as any)?.status === "completed" && (data as any)?.audioData) {
-          onCompleted(`data:audio/mpeg;base64,${(data as any).audioData}`);
-          stop(id);
-          return;
+        if ((data as any)?.status === "completed") {
+          if ((data as any)?.audioData) {
+            onCompleted(`data:audio/mpeg;base64,${(data as any).audioData}`);
+            stop(id);
+            return;
+          }
+
+          if ((data as any)?.audioUrl) {
+            onCompleted((data as any).audioUrl);
+            stop(id);
+            return;
+          }
         }
 
         if ((data as any)?.status === "failed") {

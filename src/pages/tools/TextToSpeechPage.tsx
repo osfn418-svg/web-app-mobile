@@ -44,7 +44,7 @@ export default function TextToSpeechPage() {
   const poller = useTtsPolling({
     ttsUrl: TTS_URL,
     authToken: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-    intervalMs: 2000,
+    intervalMs: 4000,
     timeoutMs: 4 * 60 * 1000,
   });
 
@@ -434,10 +434,20 @@ export default function TextToSpeechPage() {
                   </button>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm text-foreground line-clamp-2">{audio.text}</p>
-                    <div className="flex items-center gap-2 mt-2">
+                    <div className="flex items-center gap-2 mt-2 flex-wrap">
                       <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded">
                         {audio.voice}
                       </span>
+                      {audio.status === 'generating' && audio.remoteAudioUrl && (
+                        <a
+                          href={audio.remoteAudioUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-xs text-primary hover:underline"
+                        >
+                          فتح رابط الصوت
+                        </a>
+                      )}
                     </div>
                     {audio.isPlaying && (
                       <div className="flex gap-1 mt-3">
