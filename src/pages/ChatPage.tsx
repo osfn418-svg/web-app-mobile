@@ -11,7 +11,8 @@ import { Link, useParams } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { streamChat } from '@/lib/chatService';
 import { toast } from 'sonner';
-import ReactMarkdown from 'react-markdown';
+import MessageContent from '@/components/chat/MessageContent';
+import ModelSelector from '@/components/chat/ModelSelector';
 
 interface Message {
   id: string;
@@ -32,6 +33,7 @@ export default function ChatPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [selectedModel, setSelectedModel] = useState('gemini-3');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const tool = toolInfo[toolId || 'assistant'] || toolInfo.assistant;
@@ -176,11 +178,10 @@ export default function ChatPage() {
               </p>
             </div>
           </div>
-          <div className="flex gap-2">
-            <span className="px-3 py-1.5 bg-primary/20 text-primary rounded-lg text-sm font-medium">
-              Gemini 3
-            </span>
-          </div>
+          <ModelSelector 
+            selectedModel={selectedModel} 
+            onSelectModel={setSelectedModel} 
+          />
         </div>
       </header>
 
@@ -201,9 +202,7 @@ export default function ChatPage() {
               }`}
             >
               {message.role === 'assistant' ? (
-                <div className="prose prose-sm dark:prose-invert max-w-none">
-                  <ReactMarkdown>{message.content}</ReactMarkdown>
-                </div>
+                <MessageContent content={message.content} />
               ) : (
                 <p className="text-sm whitespace-pre-wrap">{message.content}</p>
               )}
