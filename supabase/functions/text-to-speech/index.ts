@@ -14,29 +14,23 @@ type GenerateBody = {
   speed?: number;
 };
 
-type CheckBody = {
-  action: "check";
-  audioUrl?: string;
-};
-
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-async function tryFetchAudioBase64(audioUrl: string): Promise<
+// Retry fetching audio from CDN for up to 20 seconds inside the edge function
+async function waitForAudio(audioUrl: string, maxMs = 20000): Promise<
   | { status: "completed"; audioData: string }
-  | { status: "pending"; lastHttpStatus?: number }
-  | { status: "failed"; httpStatus?: number; message: string; details?: string }
+  | { status: "failed"; message: string }
 > {
-  // CDN object may appear with delay. Keep each check short; client will poll.
-  const retryDelaysMs = [0, 700, 1500, 2500];
-  let lastStatus = 0;
-  let lastBody = "";
+  const startTime = Date.now();
+  const retryDelays = [0, 500, 1000, 1500, 2000, 2500, 3000, 4000, 5000];
+  let delayIdx = 0;
 
-  for (const d of retryDelaysMs) {
-    if (d) await sleep(d);
+  while (Date.now() - startTime < maxMs) {
+    if (retryDelays[delayIdx]) await sleep(retryDelays[delayIdx]);
+    delayIdx = Math.min(delayIdx + 1, retryDelays.length - 1);
 
-    let resp: Response;
     try {
-      resp = await fetch(audioUrl, {
+      const resp = await fetch(audioUrl, {
         redirect: "follow",
         headers: {
           "User-Agent": "Mozilla/5.0 (compatible; LovableCloud/1.0)",
@@ -45,39 +39,28 @@ async function tryFetchAudioBase64(audioUrl: string): Promise<
           Pragma: "no-cache",
         },
       });
+
+      if (resp.ok) {
+        const audioBuffer = await resp.arrayBuffer();
+        const base64Audio = base64Encode(new Uint8Array(audioBuffer));
+        return { status: "completed", audioData: base64Audio };
+      }
+
+      // Keep polling on 404
+      if (resp.status === 404) {
+        await resp.text().catch(() => {});
+        continue;
+      }
+
+      // Other errors: fail
+      const errBody = await resp.text().catch(() => "");
+      return { status: "failed", message: `HTTP ${resp.status}: ${errBody.slice(0, 300)}` };
     } catch (e) {
-      return {
-        status: "failed",
-        message: "تعذر الاتصال بمصدر ملف الصوت",
-        details: e instanceof Error ? e.message : String(e),
-      };
+      return { status: "failed", message: e instanceof Error ? e.message : String(e) };
     }
-
-    lastStatus = resp.status;
-
-    if (resp.ok) {
-      const audioBuffer = await resp.arrayBuffer();
-      const base64Audio = base64Encode(new Uint8Array(audioBuffer));
-      return { status: "completed", audioData: base64Audio };
-    }
-
-    if (resp.status === 404) {
-      lastBody = await resp.text().catch(() => "");
-      continue;
-    }
-
-    lastBody = await resp.text().catch(() => "");
-    console.error("Audio fetch failed:", resp.status, lastBody);
-    return {
-      status: "failed",
-      httpStatus: resp.status,
-      message: "تعذر تحميل ملف الصوت",
-      details: lastBody.slice(0, 600),
-    };
   }
 
-  if (lastStatus === 404) return { status: "pending", lastHttpStatus: lastStatus };
-  return { status: "pending", lastHttpStatus: lastStatus || undefined };
+  return { status: "failed", message: "انتهى وقت الانتظار — الملف لم يصل للخادم" };
 }
 
 serve(async (req) => {
@@ -86,63 +69,14 @@ serve(async (req) => {
   }
 
   try {
-    const body = (await req.json()) as GenerateBody | CheckBody;
+    const body = (await req.json()) as GenerateBody;
     const AIML_API_KEY = Deno.env.get("AIML_API_KEY");
 
     if (!AIML_API_KEY) {
       throw new Error("AIML_API_KEY is not configured");
     }
 
-    // --- CHECK ---
-    if ((body as CheckBody).action === "check") {
-      const { audioUrl } = body as CheckBody;
-
-      if (!audioUrl) {
-        return new Response(JSON.stringify({ error: "audioUrl مطلوب" }), {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-
-      const fetched = await tryFetchAudioBase64(audioUrl);
-
-      if (fetched.status === "completed") {
-        return new Response(
-          JSON.stringify({
-            success: true,
-            status: "completed",
-            audioData: fetched.audioData,
-            format: "mp3",
-          }),
-          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-
-      if (fetched.status === "failed") {
-        return new Response(
-          JSON.stringify({
-            success: true,
-            status: "failed",
-            error: fetched.message,
-            httpStatus: fetched.httpStatus,
-            details: fetched.details,
-          }),
-          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-
-      return new Response(
-        JSON.stringify({
-          success: true,
-          status: "pending",
-          lastHttpStatus: fetched.lastHttpStatus,
-        }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    // --- GENERATE ---
-    const { text, voice, speed } = body as GenerateBody;
+    const { text, voice, speed } = body;
 
     if (!text || text.trim().length === 0) {
       return new Response(JSON.stringify({ error: "النص مطلوب" }), {
@@ -163,7 +97,7 @@ serve(async (req) => {
         model: "openai/tts-1",
         text: text.trim(),
         voice: voice || "alloy",
-        speed: typeof speed === "number" ? speed : undefined,
+        speed: typeof speed === "number" ? speed : 1,
         response_format: "mp3",
       }),
     });
@@ -173,7 +107,7 @@ serve(async (req) => {
       console.error("AIML TTS error:", ttsResp.status, errorText);
 
       if (ttsResp.status === 429) {
-        return new Response(JSON.stringify({ error: "تم تجاوز حد الاستخدام" }), {
+        return new Response(JSON.stringify({ error: "تم تجاوز حد الاستخدام، حاول لاحقاً" }), {
           status: 429,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
@@ -188,39 +122,14 @@ serve(async (req) => {
 
       if (ttsResp.status === 403) {
         return new Response(
-          JSON.stringify({
-            error: "تم الوصول لحد استخدام المفتاح (403) — يرجى تحديث مفتاح الخدمة أو زيادة الحصة",
-            details: errorText.slice(0, 800),
-          }),
-          {
-            status: 403,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          }
-        );
-      }
-
-      if (ttsResp.status === 401) {
-        return new Response(
-          JSON.stringify({
-            error: "غير مصرح (401) — تحقق من صلاحية مفتاح الخدمة",
-            details: errorText.slice(0, 800),
-          }),
-          {
-            status: 401,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          }
+          JSON.stringify({ error: "حد المفتاح (403) — تحديث المفتاح أو زيادة الحصة", details: errorText.slice(0, 600) }),
+          { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
       return new Response(
-        JSON.stringify({
-          error: "خطأ في تحويل النص إلى صوت",
-          details: errorText.slice(0, 800),
-        }),
-        {
-          status: 500,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        }
+        JSON.stringify({ error: "خطأ في تحويل النص إلى صوت", details: errorText.slice(0, 600) }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
@@ -238,42 +147,27 @@ serve(async (req) => {
       });
     }
 
-    // Quick attempt: if CDN is ready fast, return Base64 immediately; otherwise return pending + URL.
-    const fetched = await tryFetchAudioBase64(audioUrl);
+    // Wait inside edge function for up to 20s for CDN
+    const result = await waitForAudio(audioUrl);
 
-    if (fetched.status === "completed") {
+    if (result.status === "completed") {
       return new Response(
         JSON.stringify({
           success: true,
           status: "completed",
-          audioData: fetched.audioData,
+          audioData: result.audioData,
           format: "mp3",
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    if (fetched.status === "failed") {
-      return new Response(
-        JSON.stringify({
-          success: true,
-          status: "failed",
-          error: fetched.message,
-          httpStatus: fetched.httpStatus,
-          details: fetched.details,
-          format: "mp3",
-        }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
+    // If still not ready after 20s, return failure so the UI doesn't hang
     return new Response(
       JSON.stringify({
-        success: true,
-        status: "pending",
-        audioUrl,
-        lastHttpStatus: fetched.lastHttpStatus,
-        format: "mp3",
+        success: false,
+        status: "failed",
+        error: result.message,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
@@ -281,10 +175,7 @@ serve(async (req) => {
     console.error("TTS error:", e);
     return new Response(
       JSON.stringify({ error: e instanceof Error ? e.message : "خطأ غير معروف" }),
-      {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      }
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
 });
