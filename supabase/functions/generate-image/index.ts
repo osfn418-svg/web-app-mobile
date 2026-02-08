@@ -12,10 +12,10 @@ serve(async (req) => {
 
   try {
     const { prompt } = await req.json();
-    const AIML_API_KEY = Deno.env.get("AIML_API_KEY");
+    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     
-    if (!AIML_API_KEY) {
-      throw new Error("AIML_API_KEY is not configured");
+    if (!LOVABLE_API_KEY) {
+      throw new Error("LOVABLE_API_KEY is not configured");
     }
 
     if (!prompt || prompt.trim().length === 0) {
@@ -25,28 +25,41 @@ serve(async (req) => {
       });
     }
 
-    // Use FLUX model - generates exactly what user describes
-    const response = await fetch("https://api.aimlapi.com/v1/images/generations", {
+    console.log("Generating image with prompt:", prompt);
+
+    // Use Lovable AI Gateway with Gemini image generation model
+    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${AIML_API_KEY}`,
+        Authorization: `Bearer ${LOVABLE_API_KEY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "flux/schnell",
-        prompt: prompt,
-        n: 1,
-        size: "1024x1024",
+        model: "google/gemini-2.5-flash-image",
+        messages: [
+          {
+            role: "user",
+            content: `Generate an image: ${prompt}`
+          }
+        ],
+        modalities: ["image", "text"]
       }),
     });
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error("AIML API error:", response.status, errorText);
+      console.error("Lovable AI error:", response.status, errorText);
       
       if (response.status === 429) {
-        return new Response(JSON.stringify({ error: "تم تجاوز حد الاستخدام" }), {
+        return new Response(JSON.stringify({ error: "تم تجاوز حد الاستخدام، يرجى المحاولة لاحقاً" }), {
           status: 429,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      
+      if (response.status === 402) {
+        return new Response(JSON.stringify({ error: "يرجى إضافة رصيد لحسابك" }), {
+          status: 402,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
@@ -58,10 +71,12 @@ serve(async (req) => {
     }
 
     const data = await response.json();
+    console.log("Response received from AI Gateway");
     
-    const imageUrl = data.data?.[0]?.url || data.data?.[0]?.b64_json;
+    // Extract image from Gemini response
+    const imageData = data.choices?.[0]?.message?.images?.[0]?.image_url?.url;
     
-    if (!imageUrl) {
+    if (!imageData) {
       console.error("No image in response:", JSON.stringify(data));
       return new Response(JSON.stringify({ error: "لم يتم توليد الصورة" }), {
         status: 500,
@@ -71,8 +86,8 @@ serve(async (req) => {
     
     return new Response(JSON.stringify({ 
       success: true,
-      image: imageUrl,
-      isBase64: !!data.data?.[0]?.b64_json
+      image: imageData,
+      isBase64: imageData.startsWith('data:')
     }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
