@@ -24,7 +24,7 @@ interface GeneratedAudio {
   audioUrl: string;
 }
 
-const TTS_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/text-to-speech`;
+const TTS_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/text-to-speech-v2`;
 
 export default function TextToSpeechPage() {
   const [text, setText] = useState('');
@@ -142,6 +142,19 @@ export default function TextToSpeechPage() {
 
   const downloadAudio = async (audio: GeneratedAudio) => {
     try {
+      // Data-URL audio (base64) — download directly
+      if (audio.audioUrl.startsWith('data:')) {
+        const a = document.createElement('a');
+        a.href = audio.audioUrl;
+        a.download = `speech-${audio.id}.mp3`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        toast.success('جاري تحميل الملف الصوتي...');
+        return;
+      }
+
+      // Remote URL audio
       const response = await fetch(audio.audioUrl);
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);

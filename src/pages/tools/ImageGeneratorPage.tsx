@@ -53,9 +53,11 @@ export default function ImageGeneratorPage() {
         throw new Error(data.error || 'Failed to generate image');
       }
 
-      const imageUrl = data.isBase64 
-        ? `data:image/png;base64,${data.image}` 
-        : data.image;
+      const imageUrl = typeof data.image === 'string' && data.image.startsWith('data:')
+        ? data.image
+        : data.isBase64
+          ? `data:image/png;base64,${data.image}`
+          : data.image;
 
       const newImage: GeneratedImage = {
         id: Date.now().toString(),
