@@ -7,18 +7,7 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-// Map from OpenAI-style voice names to ElevenLabs voice IDs
-const voiceMapping: Record<string, string> = {
-  alloy: "JBFqnCBsd6RMkjVDRZzb",   // George
-  echo: "TX3LPaxmHKxFdv7VOQHJ",    // Liam
-  fable: "onwK4e9ZLuTAKqWW03F9",   // Daniel
-  onyx: "N2lVS1w4EtoT3dr4eOWO",    // Callum
-  nova: "XrExE9yKIg1WjnnlVkGX",    // Matilda
-  shimmer: "EXAVITQu4vr4xnSDxMaL", // Sarah
-};
-
 type GenerateBody = {
-  action?: "generate";
   text?: string;
   voice?: string;
   speed?: number;
@@ -31,10 +20,10 @@ serve(async (req) => {
 
   try {
     const body = (await req.json()) as GenerateBody;
-    const ELEVENLABS_API_KEY = Deno.env.get("ELEVENLABS_API_KEY");
+    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
 
-    if (!ELEVENLABS_API_KEY) {
-      throw new Error("ELEVENLABS_API_KEY is not configured");
+    if (!LOVABLE_API_KEY) {
+      throw new Error("LOVABLE_API_KEY is not configured");
     }
 
     const { text, voice, speed } = body;
@@ -46,33 +35,26 @@ serve(async (req) => {
       });
     }
 
-    const voiceId = voiceMapping[voice || "alloy"] || voiceMapping.alloy;
+    console.log("Generating TTS via Lovable AI Gateway for text:", text.substring(0, 50) + "...");
 
-    console.log("Generating TTS via ElevenLabs for text:", text.substring(0, 50) + "...");
-
-    const ttsResp = await fetch(
-      `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}?output_format=mp3_44100_128`,
-      {
-        method: "POST",
-        headers: {
-          "xi-api-key": ELEVENLABS_API_KEY,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          text: text.trim(),
-          model_id: "eleven_turbo_v2_5",
-          voice_settings: {
-            stability: 0.5,
-            similarity_boost: 0.75,
-            speed: typeof speed === "number" ? Math.min(Math.max(speed, 0.7), 1.2) : 1.0,
-          },
-        }),
-      }
-    );
+    const ttsResp = await fetch("https://ai.gateway.lovable.dev/v1/audio/speech", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${LOVABLE_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "openai/tts-1",
+        input: text.trim(),
+        voice: voice || "alloy",
+        speed: typeof speed === "number" ? speed : 1.0,
+        response_format: "mp3",
+      }),
+    });
 
     if (!ttsResp.ok) {
       const errorText = await ttsResp.text().catch(() => "");
-      console.error("ElevenLabs TTS error:", ttsResp.status, errorText);
+      console.error("Lovable AI TTS error:", ttsResp.status, errorText);
 
       if (ttsResp.status === 429) {
         return new Response(JSON.stringify({ error: "تم تجاوز حد الاستخدام، حاول لاحقاً" }), {
@@ -81,10 +63,10 @@ serve(async (req) => {
         });
       }
 
-      if (ttsResp.status === 401) {
+      if (ttsResp.status === 402) {
         return new Response(
-          JSON.stringify({ error: "غير مصرح (401) — تحقق من مفتاح ElevenLabs" }),
-          { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          JSON.stringify({ error: "يرجى إضافة رصيد للمتابعة" }),
+          { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
@@ -94,7 +76,7 @@ serve(async (req) => {
       );
     }
 
-    // ElevenLabs returns audio binary directly
+    // Lovable AI Gateway returns audio binary directly
     const audioBuffer = await ttsResp.arrayBuffer();
     const base64Audio = base64Encode(new Uint8Array(audioBuffer));
 
