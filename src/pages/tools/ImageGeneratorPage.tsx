@@ -4,10 +4,13 @@ import {
   ArrowRight, 
   Download, 
   Sparkles,
-  Loader2
+  Loader2,
+  ImageIcon,
+  Trash2
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
+import { useActivityLogger } from '@/hooks/useActivityLogger';
 
 interface GeneratedImage {
   id: string;
@@ -18,10 +21,14 @@ interface GeneratedImage {
 
 const IMAGE_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-image`;
 
+// Tool ID for activity logging
+const IMAGE_TOOL_ID = 'dc213f9e-6fdd-4852-8111-3ec1aa911364';
+
 export default function ImageGeneratorPage() {
   const [prompt, setPrompt] = useState('');
   const [loading, setLoading] = useState(false);
   const [images, setImages] = useState<GeneratedImage[]>([]);
+  const { logActivity } = useActivityLogger();
 
   const generateImage = async () => {
     if (!prompt.trim() || loading) return;
@@ -69,6 +76,13 @@ export default function ImageGeneratorPage() {
       setImages(prev => [newImage, ...prev]);
       setPrompt('');
       toast.success('تم توليد الصورة بنجاح!');
+      
+      // Log activity
+      logActivity({
+        toolId: IMAGE_TOOL_ID,
+        title: `صورة: ${prompt.slice(0, 50)}...`,
+        type: 'generation'
+      });
     } catch (error) {
       console.error('Image generation error:', error);
       toast.error('حدث خطأ أثناء توليد الصورة');

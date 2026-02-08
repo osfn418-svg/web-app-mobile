@@ -9,11 +9,13 @@ import {
   Loader2,
   Music,
   Volume2,
-  RefreshCw
+  RefreshCw,
+  Trash2
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
+import { useActivityLogger } from '@/hooks/useActivityLogger';
 
 interface GeneratedAudio {
   id: string;
@@ -30,6 +32,7 @@ interface GeneratedAudio {
 
 const MUSIC_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-music`;
 const MAX_GENERATION_TIME = 4 * 60 * 1000; // 4 minutes
+const AUDIO_TOOL_ID = '93b89d30-4187-46aa-aa44-d268f176c901';
 
 export default function AudioGeneratorPage() {
   const { isPro } = useAuth();
@@ -39,6 +42,7 @@ export default function AudioGeneratorPage() {
   const [genre, setGenre] = useState('ambient');
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const pollingRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
+  const { logActivity } = useActivityLogger();
 
   const genres = [
     { id: 'ambient', label: 'أمبينت', emoji: '🌊' },
@@ -215,6 +219,13 @@ export default function AudioGeneratorPage() {
       setAudios((prev) => [newAudio, ...prev]);
       setPrompt('');
       toast.message('بدأ توليد الموسيقى...');
+
+      // Log activity
+      logActivity({
+        toolId: AUDIO_TOOL_ID,
+        title: `موسيقى: ${prompt.slice(0, 40)}...`,
+        type: 'generation'
+      });
 
       const pollInterval = setInterval(async () => {
         const isDone = await checkAudioStatus(data.generationId, newAudio.id, now);

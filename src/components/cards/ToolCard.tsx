@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { Lock, Star, ChevronLeft } from 'lucide-react';
+import { Lock, Star, ChevronLeft, Sparkles } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -31,27 +31,28 @@ export default function ToolCard({ tool, variant = 'default' }: ToolCardProps) {
     return (
       <Link to={isLocked ? '/subscription' : tool.tool_url}>
         <motion.div
-          whileHover={{ scale: 1.03 }}
+          whileHover={{ scale: 1.05, y: -2 }}
           whileTap={{ scale: 0.97 }}
-          className="glass-card rounded-xl p-3 neon-border relative overflow-hidden group"
+          className="glass-card rounded-2xl p-3 neon-border relative overflow-hidden group tool-card"
         >
-          <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-br from-primary/10 to-secondary/10" />
+          {/* Gradient overlay */}
+          <div className="absolute inset-0 bg-gradient-to-br from-primary/15 via-transparent to-secondary/15 opacity-60" />
           
           {tool.requires_subscription && (
-            <div className="absolute top-1 left-1 z-20">
-              <span className="pro-badge text-[10px] px-1.5 py-0.5">PRO</span>
+            <div className="absolute top-1.5 left-1.5 z-20">
+              <span className="pro-badge text-[9px] px-1.5 py-0.5">PRO</span>
             </div>
           )}
           
           <div className="relative z-10 flex flex-col items-center text-center">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-secondary flex items-center justify-center text-lg mb-2 shadow-md">
+            <div className="w-11 h-11 rounded-xl icon-gradient flex items-center justify-center text-lg mb-2">
               {tool.logo_url}
             </div>
-            <h3 className="font-medium text-foreground text-xs line-clamp-1">{tool.tool_name}</h3>
+            <h3 className="font-semibold text-foreground text-xs line-clamp-1">{tool.tool_name}</h3>
           </div>
 
           {isLocked && (
-            <div className="absolute inset-0 bg-background/60 backdrop-blur-sm flex items-center justify-center z-30">
+            <div className="absolute inset-0 bg-background/70 backdrop-blur-sm flex items-center justify-center z-30 rounded-2xl">
               <Lock className="w-5 h-5 text-muted-foreground" />
             </div>
           )}
@@ -65,18 +66,18 @@ export default function ToolCard({ tool, variant = 'default' }: ToolCardProps) {
     return (
       <Link to={isLocked ? '/subscription' : tool.tool_url}>
         <motion.div
-          whileHover={{ scale: 1.02 }}
+          whileHover={{ scale: 1.02, x: -4 }}
           whileTap={{ scale: 0.98 }}
-          className="glass-card rounded-2xl p-4 neon-border relative overflow-hidden group"
+          className="glass-card rounded-2xl p-4 neon-border relative overflow-hidden group tool-card"
         >
-          <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-br from-primary/10 to-secondary/10" />
-          <div className="relative z-10 flex items-center gap-3">
-            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary/30 to-secondary/30 flex items-center justify-center text-2xl">
+          <div className="absolute inset-0 bg-gradient-to-br from-primary/10 via-transparent to-secondary/10" />
+          <div className="relative z-10 flex items-center gap-4">
+            <div className="w-14 h-14 rounded-xl icon-gradient flex items-center justify-center text-2xl">
               {tool.logo_url}
             </div>
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2">
-                <h3 className="font-semibold text-foreground truncate">{tool.tool_name}</h3>
+                <h3 className="font-bold text-foreground truncate">{tool.tool_name}</h3>
                 {tool.requires_subscription && (
                   <span className="pro-badge text-xs">PRO</span>
                 )}
@@ -98,33 +99,34 @@ export default function ToolCard({ tool, variant = 'default' }: ToolCardProps) {
   return (
     <Link to={isLocked ? '/subscription' : tool.tool_url}>
       <motion.div
-        whileHover={{ scale: 1.02 }}
+        whileHover={{ scale: 1.03, y: -4 }}
         whileTap={{ scale: 0.98 }}
-        className="glass-card rounded-2xl p-4 neon-border relative overflow-hidden group hover:shadow-lg transition-shadow"
+        className="glass-card rounded-2xl p-5 neon-border relative overflow-hidden group tool-card"
       >
-        <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-br from-primary/15 to-secondary/15" />
+        {/* Gradient background */}
+        <div className="absolute inset-0 bg-gradient-to-br from-primary/20 via-transparent to-secondary/20 opacity-70" />
         
         {tool.requires_subscription && (
-          <div className="absolute top-2 left-2 z-20">
+          <div className="absolute top-3 left-3 z-20">
             <span className="pro-badge text-xs">PRO</span>
           </div>
         )}
         
         <div className="relative z-10 flex flex-col items-center text-center">
-          <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-primary to-secondary flex items-center justify-center text-2xl mb-3 shadow-lg">
+          <div className="w-16 h-16 rounded-2xl icon-gradient flex items-center justify-center text-3xl mb-4 float">
             {tool.logo_url}
           </div>
-          <h3 className="font-semibold text-foreground mb-1 text-sm">{tool.tool_name}</h3>
-          <p className="text-xs text-muted-foreground line-clamp-2">{tool.tool_description}</p>
+          <h3 className="font-bold text-foreground mb-1.5">{tool.tool_name}</h3>
+          <p className="text-xs text-muted-foreground line-clamp-2 mb-3">{tool.tool_description}</p>
           
-          <div className="flex items-center gap-1 mt-2 text-warning">
-            <Star className="w-3.5 h-3.5 fill-current" />
-            <span className="text-xs font-medium">{(tool.rating ?? 0).toFixed(1)}</span>
+          <div className="flex items-center gap-1.5 text-warning">
+            <Star className="w-4 h-4 fill-current" />
+            <span className="text-sm font-semibold">{(tool.rating ?? 0).toFixed(1)}</span>
           </div>
         </div>
 
         {isLocked && (
-          <div className="absolute inset-0 bg-background/60 backdrop-blur-sm flex items-center justify-center z-30">
+          <div className="absolute inset-0 bg-background/70 backdrop-blur-sm flex items-center justify-center z-30 rounded-2xl">
             <Lock className="w-8 h-8 text-muted-foreground" />
           </div>
         )}

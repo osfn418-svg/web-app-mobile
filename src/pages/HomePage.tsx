@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { ChevronLeft, Clock, MessageCircle } from 'lucide-react';
+import { ChevronLeft, Clock, MessageCircle, Sparkles, Zap } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import MobileLayout from '@/components/layout/MobileLayout';
 import ToolCard from '@/components/cards/ToolCard';
@@ -34,15 +34,23 @@ export default function HomePage() {
               {profile?.full_name || 'زائر'}
             </h1>
           </div>
-          <div className="flex items-center gap-2">
-            <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+          <motion.div 
+            whileHover={{ scale: 1.05 }}
+            className="flex items-center gap-2"
+          >
+            <span className={`px-4 py-1.5 rounded-full text-xs font-bold flex items-center gap-1.5 ${
               isPro 
-                ? 'bg-gradient-pro text-primary-foreground' 
+                ? 'bg-gradient-pro text-primary-foreground shadow-lg' 
                 : 'bg-muted text-muted-foreground'
             }`}>
-              {isPro ? 'PRO' : 'FREE'}
+              {isPro ? (
+                <>
+                  <Sparkles className="w-3.5 h-3.5" />
+                  PRO
+                </>
+              ) : 'FREE'}
             </span>
-          </div>
+          </motion.div>
         </motion.div>
 
         {/* Pro Banner */}
@@ -53,20 +61,27 @@ export default function HomePage() {
             transition={{ delay: 0.15 }}
           >
             <Link to="/subscription">
-              <div className="glass-card rounded-2xl p-5 neon-border relative overflow-hidden">
-                <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-br from-primary/10 to-secondary/10" />
+              <div className="premium-card rounded-2xl p-5 relative overflow-hidden group">
+                {/* Animated gradient overlay */}
+                <div className="absolute inset-0 bg-gradient-to-br from-primary/25 via-transparent to-secondary/25" />
+                <div className="absolute top-0 right-0 w-32 h-32 bg-primary/20 rounded-full blur-3xl" />
+                <div className="absolute bottom-0 left-0 w-24 h-24 bg-secondary/20 rounded-full blur-2xl" />
+                
                 <div className="relative z-10">
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="pro-badge">PRO</span>
-                    <span className="text-sm text-foreground font-medium">أطلق العنان</span>
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="pro-badge flex items-center gap-1">
+                      <Zap className="w-3 h-3" />
+                      PRO
+                    </span>
+                    <span className="text-sm text-foreground font-semibold">أطلق العنان</span>
                   </div>
-                  <h3 className="text-lg font-bold text-foreground mb-1">
+                  <h3 className="text-xl font-bold text-foreground mb-2">
                     للإبداع الكامل
                   </h3>
-                  <p className="text-sm text-muted-foreground mb-3">
+                  <p className="text-sm text-muted-foreground mb-4">
                     وصول غير محدود لجميع نماذج التوليد الاحترافية
                   </p>
-                  <div className="flex items-center gap-2 text-primary text-sm font-medium">
+                  <div className="flex items-center gap-2 text-primary text-sm font-bold group-hover:gap-3 transition-all">
                     <span>اكتشف المزيد</span>
                     <ChevronLeft className="w-4 h-4" />
                   </div>
@@ -83,17 +98,17 @@ export default function HomePage() {
           transition={{ delay: 0.2 }}
         >
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-foreground">الأدوات</h2>
-            <Link to="/explore" className="text-sm text-primary">عرض الكل</Link>
+            <h2 className="text-lg font-bold text-foreground">الأدوات</h2>
+            <Link to="/explore" className="text-sm text-primary font-medium hover:underline">عرض الكل</Link>
           </div>
           
           {/* Filter tabs */}
           <div className="flex gap-2 mb-4 overflow-x-auto pb-2 scrollbar-hide">
             <button
               onClick={() => setSelectedCategory(null)}
-              className={`px-4 py-2 rounded-full text-sm whitespace-nowrap transition-colors ${
+              className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-all ${
                 selectedCategory === null
-                  ? 'bg-primary text-primary-foreground'
+                  ? 'bg-primary text-primary-foreground shadow-lg shadow-primary/30'
                   : 'bg-muted text-muted-foreground hover:bg-muted/80'
               }`}
             >
@@ -103,9 +118,9 @@ export default function HomePage() {
               <button
                 key={category.id}
                 onClick={() => setSelectedCategory(category.id)}
-                className={`px-4 py-2 rounded-full text-sm whitespace-nowrap transition-colors ${
+                className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-all ${
                   selectedCategory === category.id
-                    ? 'bg-primary text-primary-foreground'
+                    ? 'bg-primary text-primary-foreground shadow-lg shadow-primary/30'
                     : 'bg-muted text-muted-foreground hover:bg-muted/80'
                 }`}
               >
@@ -122,39 +137,42 @@ export default function HomePage() {
             className="mb-4"
           >
             <Link to="/tools/assistant">
-              <div className="glass-card rounded-2xl p-4 neon-border relative overflow-hidden group hover:scale-[1.02] transition-transform">
-                <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-br from-primary/20 to-secondary/20" />
+              <motion.div 
+                whileHover={{ scale: 1.02, y: -2 }}
+                className="premium-card rounded-2xl p-5 relative overflow-hidden group"
+              >
+                <div className="absolute inset-0 bg-gradient-to-br from-primary/30 via-transparent to-secondary/30" />
                 <div className="relative z-10 flex items-center gap-4">
-                  <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-primary to-secondary flex items-center justify-center text-2xl shadow-lg">
+                  <div className="w-16 h-16 rounded-2xl icon-gradient flex items-center justify-center text-3xl float">
                     🤖
                   </div>
                   <div className="flex-1">
                     <div className="flex items-center gap-2 mb-1">
                       <h3 className="text-lg font-bold text-foreground">الذكاء المساعد</h3>
-                      <span className="pro-badge text-xs">AI</span>
+                      <span className="ai-badge text-xs">AI</span>
                     </div>
-                    <p className="text-xs text-muted-foreground">
+                    <p className="text-sm text-muted-foreground">
                       تحدث مع الذكاء الاصطناعي واحصل على إجابات فورية
                     </p>
                   </div>
                   <div className="flex items-center text-primary">
                     <MessageCircle className="w-5 h-5" />
-                    <ChevronLeft className="w-4 h-4" />
+                    <ChevronLeft className="w-5 h-5 group-hover:-translate-x-1 transition-transform" />
                   </div>
                 </div>
-              </div>
+              </motion.div>
             </Link>
           </motion.div>
 
           {/* Tools grid - 3 columns with mini cards */}
           {toolsLoading ? (
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-3 gap-3">
               {[1,2,3,4,5,6].map(i => (
-                <div key={i} className="glass-card rounded-xl p-3 h-20 animate-pulse bg-muted" />
+                <div key={i} className="glass-card rounded-2xl p-3 h-24 shimmer" />
               ))}
             </div>
           ) : (
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-3 gap-3">
               {filteredTools.slice(0, 9).map((tool: any, index: number) => (
                 <motion.div
                   key={tool.id}
@@ -196,49 +214,52 @@ export default function HomePage() {
           transition={{ delay: 0.3 }}
         >
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-foreground">النشاط الأخير</h2>
-            <Link to="/tools/assistant" className="text-sm text-primary">عرض الكل</Link>
+            <h2 className="text-lg font-bold text-foreground">النشاط الأخير</h2>
+            <Link to="/saved" className="text-sm text-primary font-medium hover:underline">عرض الكل</Link>
           </div>
 
           <div className="space-y-3">
             {activitiesLoading ? (
-              <div className="glass-card rounded-xl p-4 animate-pulse bg-muted h-16" />
+              <div className="glass-card rounded-2xl p-4 shimmer h-20" />
             ) : activities.length === 0 ? (
-              <div className="glass-card rounded-xl p-4">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-primary/30 to-secondary/30 flex items-center justify-center text-xl">
+              <div className="glass-card rounded-2xl p-5 neon-border">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 rounded-xl icon-gradient flex items-center justify-center text-2xl">
                     💬
                   </div>
                   <div className="flex-1">
-                    <p className="text-sm text-foreground">ابدأ محادثة جديدة</p>
-                    <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                      <Clock className="w-3 h-3" />
-                      <span>لا توجد محادثات سابقة</span>
+                    <p className="text-sm font-medium text-foreground">ابدأ محادثة جديدة</p>
+                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-1">
+                      <Clock className="w-3.5 h-3.5" />
+                      <span>لا توجد نشاطات سابقة</span>
                     </div>
                   </div>
                 </div>
               </div>
             ) : (
-              activities.map((activity) => (
+              activities.map((activity, index) => (
                 <Link key={activity.id} to={activity.tool_url}>
                   <motion.div 
-                    whileHover={{ scale: 1.02 }}
-                    className="glass-card rounded-xl p-4 hover:bg-muted/50 transition-colors"
+                    initial={{ opacity: 0, x: 20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: index * 0.05 }}
+                    whileHover={{ scale: 1.02, x: -4 }}
+                    className="glass-card rounded-2xl p-4 neon-border"
                   >
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-primary/30 to-secondary/30 flex items-center justify-center text-xl">
+                    <div className="flex items-center gap-4">
+                      <div className="w-12 h-12 rounded-xl icon-gradient flex items-center justify-center text-xl">
                         {activity.tool_icon}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm text-foreground truncate">{activity.title}</p>
-                        <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                          <Clock className="w-3 h-3" />
+                        <p className="text-sm font-medium text-foreground truncate">{activity.title}</p>
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1">
+                          <Clock className="w-3.5 h-3.5" />
                           <span>{new Date(activity.created_at).toLocaleDateString('ar-SA')}</span>
                           <span className="mx-1">•</span>
-                          <span>{activity.tool_name}</span>
+                          <span className="font-medium">{activity.tool_name}</span>
                         </div>
                       </div>
-                      <ChevronLeft className="w-4 h-4 text-muted-foreground" />
+                      <ChevronLeft className="w-5 h-5 text-primary" />
                     </div>
                   </motion.div>
                 </Link>
