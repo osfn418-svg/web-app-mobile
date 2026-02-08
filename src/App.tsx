@@ -18,6 +18,15 @@ import ChatPage from "./pages/ChatPage";
 import AdminDashboard from "./pages/admin/AdminDashboard";
 import NotFound from "./pages/NotFound";
 
+// Tool Pages
+import ImageGeneratorPage from "./pages/tools/ImageGeneratorPage";
+import VideoGeneratorPage from "./pages/tools/VideoGeneratorPage";
+import AudioGeneratorPage from "./pages/tools/AudioGeneratorPage";
+import CodeAssistantPage from "./pages/tools/CodeAssistantPage";
+import PromptMakerPage from "./pages/tools/PromptMakerPage";
+import DocumentAnalyzerPage from "./pages/tools/DocumentAnalyzerPage";
+import VoiceChatPage from "./pages/tools/VoiceChatPage";
+
 const queryClient = new QueryClient();
 
 // Protected Route Component
@@ -83,6 +92,16 @@ function AppRoutes() {
       <Route path="/saved" element={<ProtectedRoute><SavedPage /></ProtectedRoute>} />
       <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
       <Route path="/subscription" element={<ProtectedRoute><SubscriptionPage /></ProtectedRoute>} />
+      
+      {/* Tool Routes */}
+      <Route path="/tools/assistant" element={<ProtectedRoute><ChatPage /></ProtectedRoute>} />
+      <Route path="/tools/images" element={<ProtectedRoute><ImageGeneratorPage /></ProtectedRoute>} />
+      <Route path="/tools/video" element={<ProtectedRoute><VideoGeneratorPage /></ProtectedRoute>} />
+      <Route path="/tools/audio" element={<ProtectedRoute><AudioGeneratorPage /></ProtectedRoute>} />
+      <Route path="/tools/code" element={<ProtectedRoute><CodeAssistantPage /></ProtectedRoute>} />
+      <Route path="/tools/prompt-maker" element={<ProtectedRoute><PromptMakerPage /></ProtectedRoute>} />
+      <Route path="/tools/document" element={<ProtectedRoute><DocumentAnalyzerPage /></ProtectedRoute>} />
+      <Route path="/tools/voice-chat" element={<ProtectedRoute><VoiceChatPage /></ProtectedRoute>} />
       <Route path="/tools/:toolId" element={<ProtectedRoute><ChatPage /></ProtectedRoute>} />
 
       {/* Admin Routes */}
