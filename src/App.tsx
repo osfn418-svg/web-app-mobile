@@ -36,6 +36,12 @@ import PromptMakerPage from "./pages/tools/PromptMakerPage";
 import DocumentAnalyzerPage from "./pages/tools/DocumentAnalyzerPage";
 import VoiceChatPage from "./pages/tools/VoiceChatPage";
 import SpeechToTextPage from "./pages/tools/SpeechToTextPage";
+import AudioGeneratorPage from "./pages/tools/AudioGeneratorPage";
+
+// Payment Pages
+import PaymentMethodsPage from "./pages/payment/PaymentMethodsPage";
+import CryptoPaymentPage from "./pages/payment/CryptoPaymentPage";
+import CardPaymentPage from "./pages/payment/CardPaymentPage";
 
 // Notifications
 import { AdminNotificationPopup } from "./components/notifications/AdminNotificationPopup";
@@ -125,6 +131,11 @@ function AppRoutes() {
       <Route path="/settings/notifications" element={<ProtectedRoute><NotificationsPage /></ProtectedRoute>} />
       <Route path="/settings/help" element={<ProtectedRoute><HelpCenterPage /></ProtectedRoute>} />
       <Route path="/settings/privacy" element={<ProtectedRoute><PrivacyPolicyPage /></ProtectedRoute>} />
+
+      {/* Payment Routes */}
+      <Route path="/payment" element={<ProtectedRoute><PaymentMethodsPage /></ProtectedRoute>} />
+      <Route path="/payment/crypto" element={<ProtectedRoute><CryptoPaymentPage /></ProtectedRoute>} />
+      <Route path="/payment/card" element={<ProtectedRoute><CardPaymentPage /></ProtectedRoute>} />
 
       {/* Admin Routes */}
       <Route path="/admin" element={<AdminRoute><AdminDashboard /></AdminRoute>} />
