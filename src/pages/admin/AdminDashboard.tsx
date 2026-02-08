@@ -450,12 +450,31 @@ function PlansTab() {
 
     if (editingPlan) {
       const { error } = await supabase.from('subscription_plans').update(form).eq('id', editingPlan.id);
-      if (error) toast.error('فشل في التحديث');
-      else { toast.success('تم التحديث'); setShowModal(false); resetForm(); refetch(); }
+      if (error) {
+        console.error('Plan update error:', error);
+        toast.error('فشل في التحديث: ' + error.message);
+      } else { 
+        toast.success('تم التحديث'); 
+        setShowModal(false); 
+        resetForm(); 
+        refetch(); 
+      }
     } else {
-      const { error } = await supabase.from('subscription_plans').insert({ ...form, is_active: true });
-      if (error) toast.error('فشل في الإضافة');
-      else { toast.success('تمت الإضافة'); setShowModal(false); resetForm(); refetch(); }
+      const { error } = await supabase.from('subscription_plans').insert({ 
+        ...form, 
+        is_active: true,
+        features: [],
+        currency: 'USD'
+      });
+      if (error) {
+        console.error('Plan insert error:', error);
+        toast.error('فشل في الإضافة: ' + error.message);
+      } else { 
+        toast.success('تمت الإضافة'); 
+        setShowModal(false); 
+        resetForm(); 
+        refetch(); 
+      }
     }
   };
 
