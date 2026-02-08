@@ -217,7 +217,7 @@ export default function HomePage() {
               </div>
             ) : (
               activities.map((activity) => (
-                <Link key={activity.id} to="/tools/assistant">
+                <Link key={activity.id} to={activity.tool_url}>
                   <motion.div 
                     whileHover={{ scale: 1.02 }}
                     className="glass-card rounded-xl p-4 hover:bg-muted/50 transition-colors"

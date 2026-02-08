@@ -15,6 +15,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { streamChat } from '@/lib/chatService';
 import { useTTS } from '@/hooks/useTTS';
+import { useChatPersistence } from '@/hooks/useChatPersistence';
 
 // TypeScript declarations for Web Speech API
 interface SpeechRecognitionType extends EventTarget {
@@ -38,7 +39,7 @@ declare global {
 }
 
 export default function VoiceChatPage() {
-  const { isPro } = useAuth();
+  const { isPro, user } = useAuth();
   const [isCallActive, setIsCallActive] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [isSpeakerOn, setIsSpeakerOn] = useState(true);
@@ -51,8 +52,22 @@ export default function VoiceChatPage() {
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const recognitionRef = useRef<SpeechRecognitionType | null>(null);
   const isProcessingRef = useRef(false);
-  
+
   const { speak, stop: stopSpeaking, isSpeaking } = useTTS({ lang: 'ar-SA', rate: 1 });
+
+  // Persist voice conversations as logs
+  const VOICE_TOOL_DB_ID = '03e8bc68-504c-48f2-a12d-daca5ddde2a3';
+  const { conversationId, createConversation, saveMessage, startNewChat } = useChatPersistence(VOICE_TOOL_DB_ID);
+  const conversationIdRef = useRef<string | null>(null);
+  const messagesRef = useRef<{role: 'user' | 'assistant', content: string}[]>([]);
+
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
+
+  useEffect(() => {
+    conversationIdRef.current = conversationId;
+  }, [conversationId]);
 
   useEffect(() => {
     if (isCallActive) {
@@ -112,9 +127,21 @@ export default function VoiceChatPage() {
     stopListening();
 
     const userMsg = { role: 'user' as const, content: text };
-    const newMessages = [...messages, userMsg];
+    const baseMessages = messagesRef.current;
+    const newMessages = [...baseMessages, userMsg];
+    messagesRef.current = newMessages;
     setMessages(newMessages);
     setUserTranscript('');
+
+    // Persist (best-effort)
+    let currentConvId = conversationIdRef.current;
+    if (!currentConvId) {
+      currentConvId = await createConversation(text);
+      if (currentConvId) conversationIdRef.current = currentConvId;
+    }
+    if (currentConvId) {
+      void saveMessage(currentConvId, 'user', text);
+    }
 
     let assistantContent = '';
 
@@ -128,16 +155,23 @@ export default function VoiceChatPage() {
         },
         onDone: () => {
           console.log('AI response complete:', assistantContent);
-          setMessages(prev => [...prev, { role: 'assistant', content: assistantContent }]);
-          
+
+          const assistantMsg = { role: 'assistant' as const, content: assistantContent };
+          const updated = [...messagesRef.current, assistantMsg];
+          messagesRef.current = updated;
+          setMessages(updated);
+
+          if (currentConvId && assistantContent) {
+            void saveMessage(currentConvId, 'assistant', assistantContent);
+          }
+
           if (isSpeakerOn && assistantContent) {
             speak(assistantContent);
           }
-          
+
           isProcessingRef.current = false;
           setIsProcessing(false);
-          
-          // Resume listening after a delay
+
           setTimeout(() => {
             if (isCallActive && !isMuted) {
               startListening();
@@ -149,7 +183,7 @@ export default function VoiceChatPage() {
           toast.error(error);
           isProcessingRef.current = false;
           setIsProcessing(false);
-          
+
           setTimeout(() => {
             if (isCallActive && !isMuted) {
               startListening();
@@ -162,14 +196,14 @@ export default function VoiceChatPage() {
       toast.error('حدث خطأ');
       isProcessingRef.current = false;
       setIsProcessing(false);
-      
+
       setTimeout(() => {
         if (isCallActive && !isMuted) {
           startListening();
         }
       }, 500);
     }
-  }, [messages, isSpeakerOn, speak, isCallActive, isMuted, startListening, stopListening]);
+  }, [createConversation, saveMessage, isSpeakerOn, speak, isCallActive, isMuted, startListening, stopListening]);
 
   // Initialize speech recognition
   const initSpeechRecognition = useCallback(() => {
@@ -265,7 +299,9 @@ export default function VoiceChatPage() {
     }
 
     setIsCallActive(true);
-    setMessages([]);
+    startNewChat();
+    conversationIdRef.current = null;
+
     setTranscript('');
     setUserTranscript('');
     toast.success('تم بدء المكالمة');
@@ -273,7 +309,9 @@ export default function VoiceChatPage() {
     // AI greeting
     const greeting = 'مرحباً! أنا المساعد الصوتي. كيف يمكنني مساعدتك اليوم؟';
     setTranscript(greeting);
-    setMessages([{ role: 'assistant', content: greeting }]);
+    const greetingMsg = { role: 'assistant' as const, content: greeting };
+    messagesRef.current = [greetingMsg];
+    setMessages([greetingMsg]);
     
     if (isSpeakerOn) {
       speak(greeting);
