@@ -14,6 +14,11 @@ type GenerateBody = {
   speed?: number;
 };
 
+type CheckBody = {
+  action: "check";
+  audioUrl: string;
+};
+
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 // Retry fetching audio from CDN with internal polling (up to 15s only)
@@ -63,14 +68,60 @@ serve(async (req) => {
   }
 
   try {
-    const body = (await req.json()) as GenerateBody;
+    const body = (await req.json()) as GenerateBody | CheckBody;
+
+    // --- CHECK action: poll for audio readiness ---
+    if ((body as CheckBody).action === "check") {
+      const { audioUrl } = body as CheckBody;
+      if (!audioUrl) {
+        return new Response(JSON.stringify({ error: "audioUrl مطلوب" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const fetched = await waitForAudio(audioUrl, 10000); // 10s internal check
+
+      if (fetched.status === "completed") {
+        return new Response(
+          JSON.stringify({
+            success: true,
+            status: "completed",
+            audioData: fetched.audioData,
+            format: "mp3",
+          }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      if (fetched.status === "failed") {
+        return new Response(
+          JSON.stringify({
+            success: true,
+            status: "failed",
+            error: fetched.error,
+          }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          status: "pending",
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // --- GENERATE action ---
     const AIML_API_KEY = Deno.env.get("AIML_API_KEY");
 
     if (!AIML_API_KEY) {
       throw new Error("AIML_API_KEY is not configured");
     }
 
-    const { text, voice, speed } = body;
+    const { text, voice, speed } = body as GenerateBody;
 
     if (!text || text.trim().length === 0) {
       return new Response(JSON.stringify({ error: "النص مطلوب" }), {
