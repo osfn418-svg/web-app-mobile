@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { 
   ArrowRight, 
@@ -6,7 +6,8 @@ import {
   Download, 
   Sparkles,
   Loader2,
-  Video
+  Video,
+  RefreshCw
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
@@ -16,9 +17,14 @@ interface GeneratedVideo {
   id: string;
   prompt: string;
   thumbnail: string;
+  videoUrl: string | null;
   duration: string;
   timestamp: Date;
+  status: 'generating' | 'completed' | 'failed';
+  generationId?: string;
 }
+
+const VIDEO_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-video`;
 
 export default function VideoGeneratorPage() {
   const { isPro } = useAuth();
@@ -26,42 +32,143 @@ export default function VideoGeneratorPage() {
   const [loading, setLoading] = useState(false);
   const [videos, setVideos] = useState<GeneratedVideo[]>([]);
   const [duration, setDuration] = useState('5');
+  const pollingRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Cleanup polling on unmount
+  useEffect(() => {
+    return () => {
+      if (pollingRef.current) {
+        clearInterval(pollingRef.current);
+      }
+    };
+  }, []);
+
+  const checkVideoStatus = async (generationId: string, videoId: string) => {
+    try {
+      const response = await fetch(VIDEO_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+        },
+        body: JSON.stringify({ 
+          action: 'check',
+          generationId,
+        }),
+      });
+
+      const data = await response.json();
+      
+      if (data.status === 'completed' && data.video_url) {
+        setVideos(prev => prev.map(v => 
+          v.id === videoId 
+            ? { ...v, status: 'completed', videoUrl: data.video_url, thumbnail: data.video_url }
+            : v
+        ));
+        return true; // Stop polling
+      } else if (data.status === 'failed') {
+        setVideos(prev => prev.map(v => 
+          v.id === videoId 
+            ? { ...v, status: 'failed' }
+            : v
+        ));
+        toast.error('فشل في توليد الفيديو');
+        return true; // Stop polling
+      }
+      
+      return false; // Continue polling
+    } catch (error) {
+      console.error('Status check error:', error);
+      return false;
+    }
+  };
 
   const generateVideo = async () => {
     if (!prompt.trim() || loading) return;
     
-    if (!isPro) {
-      toast.error('هذه الميزة متاحة فقط لمشتركي Pro');
-      return;
-    }
-    
     setLoading(true);
     
     try {
-      // Simulate AI video generation
-      await new Promise(resolve => setTimeout(resolve, 3500));
+      const response = await fetch(VIDEO_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+        },
+        body: JSON.stringify({ 
+          prompt,
+          duration,
+        }),
+      });
+
+      if (response.status === 429) {
+        toast.error('تم تجاوز حد الاستخدام، يرجى المحاولة لاحقاً');
+        return;
+      }
+
+      if (!response.ok) {
+        throw new Error('Failed to generate video');
+      }
+
+      const data = await response.json();
       
-      const thumbnails = [
-        'https://images.unsplash.com/photo-1536240478700-b869070f9279?w=400&h=300&fit=crop',
-        'https://images.unsplash.com/photo-1492619375914-88005aa9e8fb?w=400&h=300&fit=crop',
-        'https://images.unsplash.com/photo-1478720568477-152d9b164e26?w=400&h=300&fit=crop',
-      ];
-      
+      if (!data.success) {
+        throw new Error(data.error || 'Failed to generate video');
+      }
+
       const newVideo: GeneratedVideo = {
         id: Date.now().toString(),
         prompt: prompt,
-        thumbnail: thumbnails[Math.floor(Math.random() * thumbnails.length)],
+        thumbnail: 'https://images.unsplash.com/photo-1536240478700-b869070f9279?w=400&h=300&fit=crop',
+        videoUrl: null,
         duration: `${duration}s`,
         timestamp: new Date(),
+        status: 'generating',
+        generationId: data.generationId,
       };
       
       setVideos(prev => [newVideo, ...prev]);
       setPrompt('');
-      toast.success('تم توليد الفيديو بنجاح!');
+      toast.success('بدأ توليد الفيديو! سيتم إكماله قريباً...');
+
+      // Start polling for status
+      const pollInterval = setInterval(async () => {
+        const isDone = await checkVideoStatus(data.generationId, newVideo.id);
+        if (isDone) {
+          clearInterval(pollInterval);
+        }
+      }, 10000); // Check every 10 seconds
+
+      pollingRef.current = pollInterval;
+
     } catch (error) {
+      console.error('Video generation error:', error);
       toast.error('حدث خطأ أثناء توليد الفيديو');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleDownload = async (video: GeneratedVideo) => {
+    if (!video.videoUrl) {
+      toast.error('الفيديو غير جاهز بعد');
+      return;
+    }
+    
+    try {
+      const response = await fetch(video.videoUrl);
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `video-${video.id}.mp4`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+      toast.success('جاري تحميل الفيديو...');
+    } catch (error) {
+      toast.error('فشل تحميل الفيديو');
     }
   };
 
@@ -79,7 +186,10 @@ export default function VideoGeneratorPage() {
             </div>
             <div>
               <h1 className="font-semibold text-foreground">توليد الفيديو</h1>
-              <p className="text-xs text-muted-foreground">نص إلى فيديو سينمائي</p>
+              <p className="text-xs text-success flex items-center gap-1">
+                <span className="w-2 h-2 bg-success rounded-full pulse-dot"></span>
+                متصل بـ AI حقيقي
+              </p>
             </div>
           </div>
           <span className="pro-badge">PRO</span>
@@ -90,7 +200,7 @@ export default function VideoGeneratorPage() {
       <div className="px-4 py-3">
         <p className="text-sm text-muted-foreground mb-2">مدة الفيديو:</p>
         <div className="flex gap-2">
-          {['5', '10', '15'].map((d) => (
+          {['5', '10'].map((d) => (
             <button
               key={d}
               onClick={() => setDuration(d)}
@@ -127,15 +237,7 @@ export default function VideoGeneratorPage() {
                 className="glass-card rounded-2xl p-6 text-center"
               >
                 <Video className="w-12 h-12 text-primary animate-pulse mx-auto mb-3" />
-                <p className="text-sm text-muted-foreground">جاري توليد الفيديو... قد يستغرق هذا بعض الوقت</p>
-                <div className="w-full h-2 bg-muted rounded-full mt-4 overflow-hidden">
-                  <motion.div
-                    className="h-full bg-primary rounded-full"
-                    initial={{ width: '0%' }}
-                    animate={{ width: '90%' }}
-                    transition={{ duration: 3 }}
-                  />
-                </div>
+                <p className="text-sm text-muted-foreground">جاري بدء توليد الفيديو...</p>
               </motion.div>
             )}
             {videos.map((video, index) => (
@@ -147,16 +249,36 @@ export default function VideoGeneratorPage() {
                 className="glass-card rounded-2xl overflow-hidden"
               >
                 <div className="relative aspect-video">
-                  <img 
-                    src={video.thumbnail} 
-                    alt={video.prompt}
-                    className="w-full h-full object-cover"
-                  />
-                  <div className="absolute inset-0 flex items-center justify-center bg-background/30">
-                    <button className="w-16 h-16 rounded-full bg-primary/90 flex items-center justify-center">
-                      <Play className="w-8 h-8 text-primary-foreground fill-current" />
-                    </button>
-                  </div>
+                  {video.status === 'completed' && video.videoUrl ? (
+                    <video 
+                      src={video.videoUrl}
+                      poster={video.thumbnail}
+                      controls
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <>
+                      <img 
+                        src={video.thumbnail} 
+                        alt={video.prompt}
+                        className="w-full h-full object-cover"
+                      />
+                      <div className="absolute inset-0 flex items-center justify-center bg-background/50">
+                        {video.status === 'generating' ? (
+                          <div className="text-center">
+                            <RefreshCw className="w-12 h-12 text-primary animate-spin mx-auto mb-2" />
+                            <p className="text-sm text-foreground">جاري التوليد...</p>
+                          </div>
+                        ) : video.status === 'failed' ? (
+                          <p className="text-sm text-destructive">فشل التوليد</p>
+                        ) : (
+                          <button className="w-16 h-16 rounded-full bg-primary/90 flex items-center justify-center">
+                            <Play className="w-8 h-8 text-primary-foreground fill-current" />
+                          </button>
+                        )}
+                      </div>
+                    </>
+                  )}
                   <span className="absolute bottom-3 right-3 px-2 py-1 bg-background/80 rounded-lg text-xs text-foreground">
                     {video.duration}
                   </span>
@@ -164,10 +286,12 @@ export default function VideoGeneratorPage() {
                 <div className="p-4">
                   <p className="text-sm text-foreground line-clamp-2 mb-3">{video.prompt}</p>
                   <button
-                    className="w-full py-2 bg-muted text-muted-foreground rounded-lg text-sm flex items-center justify-center gap-2 hover:bg-muted/80 transition-colors"
+                    onClick={() => handleDownload(video)}
+                    disabled={video.status !== 'completed'}
+                    className="w-full py-2 bg-muted text-muted-foreground rounded-lg text-sm flex items-center justify-center gap-2 hover:bg-muted/80 transition-colors disabled:opacity-50"
                   >
                     <Download className="w-4 h-4" />
-                    تحميل الفيديو
+                    {video.status === 'generating' ? 'قيد التوليد...' : 'تحميل الفيديو'}
                   </button>
                 </div>
               </motion.div>
@@ -186,6 +310,7 @@ export default function VideoGeneratorPage() {
               placeholder="صف المشهد الذي تريد توليده..."
               rows={2}
               className="w-full px-4 py-3 bg-muted border border-border rounded-xl text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary transition-colors resize-none"
+              disabled={loading}
             />
           </div>
           <motion.button
