@@ -52,6 +52,7 @@ export default function VoiceChatPage() {
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const recognitionRef = useRef<SpeechRecognitionType | null>(null);
   const isProcessingRef = useRef(false);
+  const ignoreRecognitionUntilRef = useRef(0);
 
   const { speak, stop: stopSpeaking, isSpeaking } = useTTS({ lang: 'ar-SA', rate: 1 });
 
@@ -165,18 +166,17 @@ export default function VoiceChatPage() {
             void saveMessage(currentConvId, 'assistant', assistantContent);
           }
 
-          if (isSpeakerOn && assistantContent) {
-            speak(assistantContent);
-          }
+           if (isSpeakerOn && assistantContent) {
+             // Prevent STT from picking up TTS audio
+             stopListening();
+             ignoreRecognitionUntilRef.current = Date.now() + Math.min(8000, 1200 + assistantContent.length * 35);
+             speak(assistantContent);
+           }
 
           isProcessingRef.current = false;
           setIsProcessing(false);
 
-          setTimeout(() => {
-            if (isCallActive && !isMuted) {
-              startListening();
-            }
-          }, 500);
+           // Resume listening is handled by the effect that waits for (not speaking/not processing).
         },
         onError: (error) => {
           console.error('Chat error:', error);
@@ -184,11 +184,7 @@ export default function VoiceChatPage() {
           isProcessingRef.current = false;
           setIsProcessing(false);
 
-          setTimeout(() => {
-            if (isCallActive && !isMuted) {
-              startListening();
-            }
-          }, 500);
+           // Resume listening is handled by the effect that waits for (not speaking/not processing).
         }
       });
     } catch (error) {
@@ -197,11 +193,7 @@ export default function VoiceChatPage() {
       isProcessingRef.current = false;
       setIsProcessing(false);
 
-      setTimeout(() => {
-        if (isCallActive && !isMuted) {
-          startListening();
-        }
-      }, 500);
+       // Resume listening is handled by the effect that waits for (not speaking/not processing).
     }
   }, [createConversation, saveMessage, isSpeakerOn, speak, isCallActive, isMuted, startListening, stopListening]);
 
@@ -225,9 +217,14 @@ export default function VoiceChatPage() {
       setIsListening(true);
     };
 
-    recognition.onresult = (event: SpeechRecognitionEvent) => {
-      let finalTranscript = '';
-      let interimTranscript = '';
+     recognition.onresult = (event: SpeechRecognitionEvent) => {
+       // Ignore any transcripts while TTS is playing (prevents echo/self-trigger)
+       if (Date.now() < ignoreRecognitionUntilRef.current || isProcessingRef.current) {
+         return;
+       }
+
+       let finalTranscript = '';
+       let interimTranscript = '';
 
       for (let i = event.resultIndex; i < event.results.length; i++) {
         const result = event.results[i];
@@ -256,34 +253,33 @@ export default function VoiceChatPage() {
       console.error('Speech recognition error:', event.error, event.message);
       setIsListening(false);
       
-      if (event.error === 'no-speech') {
-        // No speech detected, restart listening
-        setTimeout(() => {
-          if (isCallActive && !isMuted && !isProcessingRef.current) {
-            startListening();
-          }
-        }, 300);
-      } else if (event.error !== 'aborted') {
-        toast.error('خطأ في التعرف على الصوت: ' + event.error);
-      }
+       if (event.error !== 'aborted' && event.error !== 'no-speech') {
+         toast.error('خطأ في التعرف على الصوت: ' + event.error);
+       }
     };
 
     recognition.onend = () => {
       console.log('Speech recognition ended');
       setIsListening(false);
-      
-      // Auto-restart if call is active and not processing
-      if (isCallActive && !isMuted && !isProcessingRef.current) {
-        setTimeout(() => {
-          startListening();
-        }, 300);
-      }
     };
 
     return recognition;
-  }, [isCallActive, isMuted, handleUserMessage, startListening]);
+   }, [isCallActive, isMuted, handleUserMessage, startListening]);
 
-  const startCall = async () => {
+   useEffect(() => {
+     if (!isCallActive) return;
+     if (isMuted || isProcessing || isSpeaking) return;
+     if (!recognitionRef.current) return;
+     if (isListening) return;
+
+     const t = setTimeout(() => {
+       startListening();
+     }, 250);
+
+     return () => clearTimeout(t);
+   }, [isCallActive, isMuted, isProcessing, isSpeaking, isListening, startListening]);
+
+   const startCall = async () => {
     // Allow for testing without Pro requirement
     // if (!isPro) {
     //   toast.error('هذه الميزة متاحة فقط لمشتركي Pro');
@@ -307,24 +303,26 @@ export default function VoiceChatPage() {
     toast.success('تم بدء المكالمة');
     
     // AI greeting
-    const greeting = 'مرحباً! أنا المساعد الصوتي. كيف يمكنني مساعدتك اليوم؟';
+    const greeting = 'مرحبا';
     setTranscript(greeting);
     const greetingMsg = { role: 'assistant' as const, content: greeting };
     messagesRef.current = [greetingMsg];
     setMessages([greetingMsg]);
-    
+
+    // Initialize speech recognition right away (starting it via setTimeout often fails on mobile)
+    const recognition = initSpeechRecognition();
+    if (recognition) {
+      recognitionRef.current = recognition;
+    }
+
     if (isSpeakerOn) {
+      // Block STT from picking up the greeting audio
+      ignoreRecognitionUntilRef.current = Date.now() + 1500;
       speak(greeting);
     }
 
-    // Initialize and start listening after greeting
-    setTimeout(() => {
-      const recognition = initSpeechRecognition();
-      if (recognition) {
-        recognitionRef.current = recognition;
-        startListening();
-      }
-    }, 2000);
+    // Start listening immediately; the effect will also keep it alive
+    startListening();
   };
 
   const endCall = () => {
@@ -347,7 +345,6 @@ export default function VoiceChatPage() {
     if (isMuted) {
       setIsMuted(false);
       toast.info('تم تشغيل الميكروفون');
-      setTimeout(() => startListening(), 300);
     } else {
       setIsMuted(true);
       stopListening();
