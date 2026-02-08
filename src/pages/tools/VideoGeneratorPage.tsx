@@ -68,9 +68,41 @@ export default function VideoGeneratorPage() {
         }),
       });
 
+      if (response.status === 429) {
+        toast.error('تم تجاوز حد الاستخدام، يرجى المحاولة لاحقاً');
+        setVideos(prev => prev.map(v => v.id === videoId ? { ...v, status: 'failed' } : v));
+        return true;
+      }
+
+      if (response.status === 402) {
+        toast.error('يرجى إضافة رصيد ثم المحاولة مجدداً');
+        setVideos(prev => prev.map(v => v.id === videoId ? { ...v, status: 'failed' } : v));
+        return true;
+      }
+
+      if (response.status === 403) {
+        toast.error('تم الوصول لحد الخدمة (403) — يلزم تحديث مفتاح الخدمة/زيادة الحصة');
+        setVideos(prev => prev.map(v => v.id === videoId ? { ...v, status: 'failed' } : v));
+        return true;
+      }
+
+      if (response.status === 401) {
+        toast.error('غير مصرح (401) — تحقق من إعدادات الخدمة');
+        setVideos(prev => prev.map(v => v.id === videoId ? { ...v, status: 'failed' } : v));
+        return true;
+      }
+
+      if (!response.ok) {
+        const errText = await response.text().catch(() => '');
+        console.error('Video status check failed:', response.status, errText);
+        setVideos(prev => prev.map(v => v.id === videoId ? { ...v, status: 'failed' } : v));
+        toast.error('تعذر التحقق من حالة الفيديو');
+        return true;
+      }
+
       const data = await response.json();
       console.log('Video status:', data);
-      
+
       if (data.status === 'completed' && data.video_url) {
         setVideos(prev => prev.map(v => 
           v.id === videoId 
@@ -88,14 +120,14 @@ export default function VideoGeneratorPage() {
         toast.error('فشل في توليد الفيديو');
         return true;
       }
-      
+
       return false;
     } catch (error) {
       console.error('Status check error:', error);
+      // لا نوقف التوليد مباشرة في حال خطأ شبكة مؤقت
       return false;
     }
   };
-
   const generateVideo = async () => {
     if (!prompt.trim() || loading) return;
     
@@ -119,8 +151,24 @@ export default function VideoGeneratorPage() {
         return;
       }
 
+      if (response.status === 402) {
+        toast.error('يرجى إضافة رصيد ثم المحاولة مجدداً');
+        return;
+      }
+
+      if (response.status === 403) {
+        toast.error('تم الوصول لحد الخدمة (403) — يلزم تحديث مفتاح الخدمة/زيادة الحصة');
+        return;
+      }
+
+      if (response.status === 401) {
+        toast.error('غير مصرح (401) — تحقق من إعدادات الخدمة');
+        return;
+      }
+
       if (!response.ok) {
-        throw new Error('Failed to generate video');
+        const errText = await response.text().catch(() => '');
+        throw new Error(errText || 'Failed to generate video');
       }
 
       const data = await response.json();

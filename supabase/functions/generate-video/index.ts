@@ -21,21 +21,94 @@ serve(async (req) => {
     // Check video generation status
     if (action === "check") {
       console.log("Checking video status for:", generationId);
-      
-      const response = await fetch(`https://api.aimlapi.com/v2/generate/video/kling/generation?generation_id=${generationId}`, {
-        method: "GET",
-        headers: {
-          Authorization: `Bearer ${AIML_API_KEY}`,
-        },
-      });
 
-      const data = await response.json();
+      if (!generationId) {
+        return new Response(JSON.stringify({ error: "generationId مطلوب" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const response = await fetch(
+        `https://api.aimlapi.com/v2/generate/video/kling/generation?generation_id=${generationId}`,
+        {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${AIML_API_KEY}`,
+          },
+        }
+      );
+
+      const rawText = await response.text().catch(() => "");
+      let data: any = {};
+      try {
+        data = rawText ? JSON.parse(rawText) : {};
+      } catch {
+        data = { raw: rawText };
+      }
+
+      if (!response.ok) {
+        console.error("AIML status error:", response.status, rawText);
+
+        if (response.status === 429) {
+          return new Response(JSON.stringify({ error: "تم تجاوز حد الاستخدام" }), {
+            status: 429,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
+        if (response.status === 402) {
+          return new Response(JSON.stringify({ error: "يرجى إضافة رصيد لحسابك" }), {
+            status: 402,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
+        if (response.status === 403) {
+          return new Response(
+            JSON.stringify({
+              error: "تم الوصول لحد استخدام المفتاح (403) — يرجى تحديث مفتاح الخدمة أو زيادة الحصة",
+              details: rawText.slice(0, 800),
+            }),
+            {
+              status: 403,
+              headers: { ...corsHeaders, "Content-Type": "application/json" },
+            }
+          );
+        }
+
+        if (response.status === 401) {
+          return new Response(
+            JSON.stringify({
+              error: "غير مصرح (401) — تحقق من صلاحية مفتاح الخدمة",
+              details: rawText.slice(0, 800),
+            }),
+            {
+              status: 401,
+              headers: { ...corsHeaders, "Content-Type": "application/json" },
+            }
+          );
+        }
+
+        return new Response(
+          JSON.stringify({
+            error: "خطأ في التحقق من حالة الفيديو",
+            httpStatus: response.status,
+            details: rawText.slice(0, 800),
+          }),
+          {
+            status: 500,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          }
+        );
+      }
+
       console.log("Video status response:", JSON.stringify(data));
-      
+
       // Parse AIML response format
       let status = data.status || "queued";
-      let videoUrl = null;
-      
+      let videoUrl: string | null = null;
+
       // Check if video is ready
       if (data.video?.url) {
         videoUrl = data.video.url;
@@ -47,14 +120,17 @@ serve(async (req) => {
         // API says completed but no URL - check nested structures
         videoUrl = data.output?.url || data.result?.url || null;
       }
-      
-      return new Response(JSON.stringify({
-        id: generationId,
-        status: status,
-        video_url: videoUrl,
-      }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+
+      return new Response(
+        JSON.stringify({
+          id: generationId,
+          status: status,
+          video_url: videoUrl,
+        }),
+        {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
     }
 
     // Start video generation using Kling AI model
@@ -73,20 +149,59 @@ serve(async (req) => {
     });
 
     if (!response.ok) {
-      const errorText = await response.text();
+      const errorText = await response.text().catch(() => "");
       console.error("AIML API error:", response.status, errorText);
-      
+
       if (response.status === 429) {
         return new Response(JSON.stringify({ error: "تم تجاوز حد الاستخدام" }), {
           status: 429,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
-      
-      return new Response(JSON.stringify({ error: "خطأ في توليد الفيديو" }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+
+      if (response.status === 402) {
+        return new Response(JSON.stringify({ error: "يرجى إضافة رصيد لحسابك" }), {
+          status: 402,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      if (response.status === 403) {
+        return new Response(
+          JSON.stringify({
+            error: "تم الوصول لحد استخدام المفتاح (403) — يرجى تحديث مفتاح الخدمة أو زيادة الحصة",
+            details: errorText.slice(0, 800),
+          }),
+          {
+            status: 403,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          }
+        );
+      }
+
+      if (response.status === 401) {
+        return new Response(
+          JSON.stringify({
+            error: "غير مصرح (401) — تحقق من صلاحية مفتاح الخدمة",
+            details: errorText.slice(0, 800),
+          }),
+          {
+            status: 401,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          }
+        );
+      }
+
+      return new Response(
+        JSON.stringify({
+          error: "خطأ في توليد الفيديو",
+          details: errorText.slice(0, 800),
+        }),
+        {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
     }
 
     const data = await response.json();
