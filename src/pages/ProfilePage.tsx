@@ -40,23 +40,23 @@ export default function ProfilePage() {
     { 
       title: 'الأمان', 
       items: [
-        { icon: Lock, label: 'تغيير كلمة المرور', href: '#' },
-        { icon: Shield, label: 'المصادقة الثنائية', href: '#' },
+        { icon: Lock, label: 'تغيير كلمة المرور', href: '/settings/password' },
+        { icon: Shield, label: 'المصادقة الثنائية', href: '/settings/2fa' },
       ]
     },
     { 
       title: 'التفضيلات', 
       items: [
-        { icon: Bell, label: 'الإشعارات', href: '#' },
-        { icon: Globe, label: 'اللغة', value: 'العربية', href: '#' },
+        { icon: Bell, label: 'الإشعارات', href: '/settings/notifications' },
+        { icon: Globe, label: 'اللغة', value: 'العربية', href: '/settings/language' },
         { icon: theme === 'dark' ? Moon : Sun, label: theme === 'dark' ? 'الوضع الليلي' : 'الوضع النهاري', toggle: true, isThemeToggle: true, href: '#' },
       ]
     },
     { 
       title: 'الدعم', 
       items: [
-        { icon: HelpCircle, label: 'مركز المساعدة', href: '#' },
-        { icon: Shield, label: 'سياسة الخصوصية', href: '#' },
+        { icon: HelpCircle, label: 'مركز المساعدة', href: '/settings/help' },
+        { icon: Shield, label: 'سياسة الخصوصية', href: '/settings/privacy' },
       ]
     },
   ].filter(section => section.items.length > 0);

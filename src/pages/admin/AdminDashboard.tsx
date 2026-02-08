@@ -13,7 +13,9 @@ import {
   X,
   Package,
   CreditCard,
-  Layers
+  Layers,
+  Bell,
+  Send
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
@@ -21,7 +23,7 @@ import { useAdminTools, useAdminPlans, useAdminCategories, useAllProfiles } from
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
-type Tab = 'users' | 'tools' | 'plans' | 'categories';
+type Tab = 'users' | 'tools' | 'plans' | 'categories' | 'notifications';
 
 export default function AdminDashboard() {
   const { profile } = useAuth();
@@ -32,6 +34,7 @@ export default function AdminDashboard() {
     { id: 'tools' as Tab, label: 'الأدوات', icon: Package },
     { id: 'plans' as Tab, label: 'الخطط', icon: CreditCard },
     { id: 'categories' as Tab, label: 'الفئات', icon: Layers },
+    { id: 'notifications' as Tab, label: 'الإشعارات', icon: Bell },
   ];
 
   return (
@@ -75,6 +78,7 @@ export default function AdminDashboard() {
           {activeTab === 'tools' && <ToolsTab key="tools" />}
           {activeTab === 'plans' && <PlansTab key="plans" />}
           {activeTab === 'categories' && <CategoriesTab key="categories" />}
+          {activeTab === 'notifications' && <NotificationsTab key="notifications" />}
         </AnimatePresence>
       </main>
     </div>
@@ -648,6 +652,195 @@ function CategoriesTab() {
                 <span className="text-sm text-foreground">يتطلب اشتراك Pro</span>
               </label>
               <button onClick={handleSubmit} className="w-full py-3 bg-primary text-primary-foreground rounded-xl font-medium">{editingCat ? 'تحديث' : 'إضافة'}</button>
+            </div>
+          </Modal>
+        )}
+      </AnimatePresence>
+    </motion.div>
+  );
+}
+
+// Notifications Tab
+function NotificationsTab() {
+  const { user } = useAuth();
+  const [notifications, setNotifications] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showModal, setShowModal] = useState(false);
+  const [form, setForm] = useState({
+    title: '',
+    message: '',
+    type: 'info',
+    expires_at: ''
+  });
+
+  useState(() => {
+    loadNotifications();
+  });
+
+  const loadNotifications = async () => {
+    const { data } = await supabase
+      .from('admin_notifications')
+      .select('*')
+      .order('created_at', { ascending: false });
+    setNotifications(data || []);
+    setLoading(false);
+  };
+
+  const handleSubmit = async () => {
+    if (!form.title || !form.message) {
+      toast.error('يرجى ملء العنوان والرسالة');
+      return;
+    }
+
+    const { error } = await supabase
+      .from('admin_notifications')
+      .insert({
+        title: form.title,
+        message: form.message,
+        type: form.type,
+        expires_at: form.expires_at || null,
+        created_by: user?.id,
+        is_active: true
+      });
+
+    if (error) {
+      toast.error('فشل في إرسال الإشعار');
+    } else {
+      toast.success('تم إرسال الإشعار لجميع المستخدمين');
+      setShowModal(false);
+      setForm({ title: '', message: '', type: 'info', expires_at: '' });
+      loadNotifications();
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('هل أنت متأكد من الحذف؟')) return;
+    await supabase.from('admin_notifications').delete().eq('id', id);
+    toast.success('تم الحذف');
+    loadNotifications();
+  };
+
+  const handleToggleActive = async (id: string, current: boolean) => {
+    await supabase.from('admin_notifications').update({ is_active: !current }).eq('id', id);
+    loadNotifications();
+  };
+
+  const getTypeColor = (type: string) => {
+    switch (type) {
+      case 'warning': return 'bg-yellow-500/20 text-yellow-500';
+      case 'success': return 'bg-success/20 text-success';
+      case 'error': return 'bg-destructive/20 text-destructive';
+      default: return 'bg-primary/20 text-primary';
+    }
+  };
+
+  const getTypeLabel = (type: string) => {
+    switch (type) {
+      case 'warning': return 'تحذير';
+      case 'success': return 'نجاح';
+      case 'error': return 'خطأ';
+      default: return 'معلومات';
+    }
+  };
+
+  if (loading) return <div className="text-center py-8 text-muted-foreground">جاري التحميل...</div>;
+
+  return (
+    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h2 className="text-lg font-semibold text-foreground">إشعارات المستخدمين ({notifications.length})</h2>
+        <button onClick={() => setShowModal(true)} className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-xl text-sm">
+          <Send className="w-4 h-4" /> إرسال إشعار
+        </button>
+      </div>
+
+      <p className="text-sm text-muted-foreground">
+        أرسل إشعارات تظهر للمستخدمين عند فتح التطبيق
+      </p>
+
+      <div className="space-y-3">
+        {notifications.map((notif: any) => (
+          <div key={notif.id} className={`glass-card rounded-xl p-4 ${!notif.is_active ? 'opacity-50' : ''}`}>
+            <div className="flex items-start gap-3">
+              <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${getTypeColor(notif.type)}`}>
+                <Bell className="w-5 h-5" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <p className="font-medium text-foreground">{notif.title}</p>
+                  <span className={`px-2 py-0.5 text-xs rounded-full ${getTypeColor(notif.type)}`}>
+                    {getTypeLabel(notif.type)}
+                  </span>
+                  {!notif.is_active && (
+                    <span className="px-2 py-0.5 bg-muted text-muted-foreground text-xs rounded-full">معطل</span>
+                  )}
+                </div>
+                <p className="text-sm text-muted-foreground mt-1 line-clamp-2">{notif.message}</p>
+                <p className="text-xs text-muted-foreground mt-2">
+                  {new Date(notif.created_at).toLocaleDateString('ar-SA')}
+                </p>
+              </div>
+              <div className="flex gap-2">
+                <button onClick={() => handleToggleActive(notif.id, notif.is_active)} className="p-2 hover:bg-muted rounded-lg">
+                  {notif.is_active ? <Ban className="w-4 h-4 text-orange-500" /> : <CheckCircle className="w-4 h-4 text-success" />}
+                </button>
+                <button onClick={() => handleDelete(notif.id)} className="p-2 hover:bg-destructive/20 rounded-lg">
+                  <Trash2 className="w-4 h-4 text-destructive" />
+                </button>
+              </div>
+            </div>
+          </div>
+        ))}
+
+        {notifications.length === 0 && (
+          <div className="text-center py-8 text-muted-foreground">
+            لا توجد إشعارات
+          </div>
+        )}
+      </div>
+
+      <AnimatePresence>
+        {showModal && (
+          <Modal onClose={() => setShowModal(false)} title="إرسال إشعار جديد">
+            <div className="space-y-4">
+              <input
+                value={form.title}
+                onChange={(e) => setForm(f => ({ ...f, title: e.target.value }))}
+                placeholder="عنوان الإشعار *"
+                className="w-full p-3 bg-muted border border-border rounded-xl text-foreground"
+              />
+              <textarea
+                value={form.message}
+                onChange={(e) => setForm(f => ({ ...f, message: e.target.value }))}
+                placeholder="نص الرسالة *"
+                className="w-full p-3 bg-muted border border-border rounded-xl text-foreground min-h-[100px]"
+              />
+              <select
+                value={form.type}
+                onChange={(e) => setForm(f => ({ ...f, type: e.target.value }))}
+                className="w-full p-3 bg-muted border border-border rounded-xl text-foreground"
+              >
+                <option value="info">معلومات (أزرق)</option>
+                <option value="success">نجاح (أخضر)</option>
+                <option value="warning">تحذير (أصفر)</option>
+                <option value="error">خطأ (أحمر)</option>
+              </select>
+              <div>
+                <label className="text-sm text-muted-foreground">تاريخ الانتهاء (اختياري)</label>
+                <input
+                  type="datetime-local"
+                  value={form.expires_at}
+                  onChange={(e) => setForm(f => ({ ...f, expires_at: e.target.value }))}
+                  className="w-full mt-1 p-3 bg-muted border border-border rounded-xl text-foreground"
+                />
+              </div>
+              <button
+                onClick={handleSubmit}
+                className="w-full py-3 bg-primary text-primary-foreground rounded-xl font-medium flex items-center justify-center gap-2"
+              >
+                <Send className="w-4 h-4" />
+                إرسال للجميع
+              </button>
             </div>
           </Modal>
         )}

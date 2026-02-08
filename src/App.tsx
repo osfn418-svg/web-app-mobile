@@ -19,6 +19,14 @@ import ChatPage from "./pages/ChatPage";
 import AdminDashboard from "./pages/admin/AdminDashboard";
 import NotFound from "./pages/NotFound";
 
+// Settings Pages
+import ChangePasswordPage from "./pages/settings/ChangePasswordPage";
+import TwoFactorPage from "./pages/settings/TwoFactorPage";
+import LanguagePage from "./pages/settings/LanguagePage";
+import NotificationsPage from "./pages/settings/NotificationsPage";
+import HelpCenterPage from "./pages/settings/HelpCenterPage";
+import PrivacyPolicyPage from "./pages/settings/PrivacyPolicyPage";
+
 // Tool Pages
 import ImageGeneratorPage from "./pages/tools/ImageGeneratorPage";
 import VideoGeneratorPage from "./pages/tools/VideoGeneratorPage";
@@ -27,6 +35,9 @@ import CodeAssistantPage from "./pages/tools/CodeAssistantPage";
 import PromptMakerPage from "./pages/tools/PromptMakerPage";
 import DocumentAnalyzerPage from "./pages/tools/DocumentAnalyzerPage";
 import VoiceChatPage from "./pages/tools/VoiceChatPage";
+
+// Notifications
+import { AdminNotificationPopup } from "./components/notifications/AdminNotificationPopup";
 
 const queryClient = new QueryClient();
 
@@ -105,6 +116,14 @@ function AppRoutes() {
       <Route path="/tools/voice-chat" element={<ProtectedRoute><VoiceChatPage /></ProtectedRoute>} />
       <Route path="/tools/:toolId" element={<ProtectedRoute><ChatPage /></ProtectedRoute>} />
 
+      {/* Settings Routes */}
+      <Route path="/settings/password" element={<ProtectedRoute><ChangePasswordPage /></ProtectedRoute>} />
+      <Route path="/settings/2fa" element={<ProtectedRoute><TwoFactorPage /></ProtectedRoute>} />
+      <Route path="/settings/language" element={<ProtectedRoute><LanguagePage /></ProtectedRoute>} />
+      <Route path="/settings/notifications" element={<ProtectedRoute><NotificationsPage /></ProtectedRoute>} />
+      <Route path="/settings/help" element={<ProtectedRoute><HelpCenterPage /></ProtectedRoute>} />
+      <Route path="/settings/privacy" element={<ProtectedRoute><PrivacyPolicyPage /></ProtectedRoute>} />
+
       {/* Admin Routes */}
       <Route path="/admin" element={<AdminRoute><AdminDashboard /></AdminRoute>} />
       <Route path="/admin/*" element={<AdminRoute><AdminDashboard /></AdminRoute>} />
@@ -123,6 +142,7 @@ const App = () => (
           <TooltipProvider>
             <Toaster />
             <Sonner />
+            <AdminNotificationPopup />
             <AppRoutes />
           </TooltipProvider>
         </ThemeProvider>
