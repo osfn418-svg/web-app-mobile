@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   ArrowRight, 
@@ -673,10 +673,6 @@ function NotificationsTab() {
     expires_at: ''
   });
 
-  useState(() => {
-    loadNotifications();
-  });
-
   const loadNotifications = async () => {
     const { data } = await supabase
       .from('admin_notifications')
@@ -685,6 +681,11 @@ function NotificationsTab() {
     setNotifications(data || []);
     setLoading(false);
   };
+
+  // Load notifications on mount
+  useEffect(() => {
+    loadNotifications();
+  }, []);
 
   const handleSubmit = async () => {
     if (!form.title || !form.message) {
