@@ -14,6 +14,7 @@ import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
 import { Textarea } from '@/components/ui/textarea';
 import { Slider } from '@/components/ui/slider';
+import { useTtsPolling } from '@/hooks/useTtsPolling';
 
 interface GeneratedAudio {
   id: string;
@@ -24,6 +25,8 @@ interface GeneratedAudio {
   status: 'generating' | 'completed' | 'failed';
   /** data:audio/... when completed */
   audioUrl: string;
+  /** Remote URL returned by backend when status is pending */
+  remoteAudioUrl?: string;
 }
 
 const TTS_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/text-to-speech`;
@@ -37,6 +40,13 @@ export default function TextToSpeechPage() {
   const [showSettings, setShowSettings] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [currentPlayingId, setCurrentPlayingId] = useState<string | null>(null);
+
+  const poller = useTtsPolling({
+    ttsUrl: TTS_URL,
+    authToken: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+    intervalMs: 2000,
+    timeoutMs: 4 * 60 * 1000,
+  });
 
   useEffect(() => {
     return () => {
@@ -58,6 +68,7 @@ export default function TextToSpeechPage() {
 
     const requestText = text.trim();
     const audioId = Date.now().toString();
+    const voiceLabel = voices.find((v) => v.id === selectedVoice)?.label || selectedVoice;
 
     setLoading(true);
 
@@ -69,6 +80,7 @@ export default function TextToSpeechPage() {
           Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
         },
         body: JSON.stringify({
+          action: 'generate',
           text: requestText,
           voice: selectedVoice,
           speed: speed,
@@ -92,12 +104,68 @@ export default function TextToSpeechPage() {
 
       const data = await response.json();
 
-      if (!data?.success || !data.audioData) {
+      // New backend: pending/completed/failed
+      if (data?.success && data?.status === 'pending' && data?.audioUrl) {
+        const pendingAudio: GeneratedAudio = {
+          id: audioId,
+          text: requestText,
+          timestamp: new Date(),
+          isPlaying: false,
+          voice: voiceLabel,
+          status: 'generating',
+          audioUrl: '',
+          remoteAudioUrl: data.audioUrl,
+        };
+
+        setAudios((prev) => [pendingAudio, ...prev]);
+        setText('');
+        toast.message('جاري تجهيز الصوت...');
+
+        await poller.start({
+          id: audioId,
+          audioUrl: data.audioUrl,
+          onCompleted: (dataUrl) => {
+            setAudios((prev) =>
+              prev.map((a) =>
+                a.id === audioId
+                  ? { ...a, status: 'completed', audioUrl: dataUrl, remoteAudioUrl: undefined }
+                  : a
+              )
+            );
+            toast.success('تم إنشاء الصوت بنجاح!');
+          },
+          onFailed: (message) => {
+            setAudios((prev) => prev.map((a) => (a.id === audioId ? { ...a, status: 'failed' } : a)));
+            toast.error(message);
+          },
+        });
+
+        return;
+      }
+
+      if (data?.success && data?.status === 'failed') {
+        const failedAudio: GeneratedAudio = {
+          id: audioId,
+          text: requestText,
+          timestamp: new Date(),
+          isPlaying: false,
+          voice: voiceLabel,
+          status: 'failed',
+          audioUrl: '',
+        };
+        setAudios((prev) => [failedAudio, ...prev]);
+        toast.error(data?.error || 'حدث خطأ أثناء إنشاء الصوت');
+        return;
+      }
+
+      // Backwards-compatible: either {audioData} or {status:"completed", audioData}
+      const audioData = data?.audioData;
+
+      if (!data?.success || !audioData) {
         throw new Error(data?.error || 'Invalid TTS response');
       }
 
-      const voiceLabel = voices.find((v) => v.id === selectedVoice)?.label || selectedVoice;
-      const audioUrl = `data:audio/mpeg;base64,${data.audioData}`;
+      const audioUrl = `data:audio/mpeg;base64,${audioData}`;
 
       const newAudio: GeneratedAudio = {
         id: audioId,
@@ -115,8 +183,6 @@ export default function TextToSpeechPage() {
     } catch (error) {
       console.error('TTS error:', error);
       toast.error('حدث خطأ أثناء إنشاء الصوت');
-
-      setAudios((prev) => prev.map((a) => (a.id === audioId ? { ...a, status: 'failed' } : a)));
     } finally {
       setLoading(false);
     }
@@ -204,6 +270,8 @@ export default function TextToSpeechPage() {
   };
 
   const deleteAudio = (id: string) => {
+    poller.stop(id);
+
     if (currentPlayingId === id && audioRef.current) {
       audioRef.current.pause();
       audioRef.current = null;
@@ -339,13 +407,16 @@ export default function TextToSpeechPage() {
                 <div className="flex items-start gap-4">
                   <button
                     onClick={() => playAudio(audio)}
-                    className={`w-14 h-14 rounded-xl flex items-center justify-center transition-colors flex-shrink-0 ${
+                    disabled={audio.status === 'generating'}
+                    className={`w-14 h-14 rounded-xl flex items-center justify-center transition-colors flex-shrink-0 disabled:opacity-60 disabled:cursor-not-allowed ${
                       audio.isPlaying 
                         ? 'bg-primary text-primary-foreground' 
                         : 'bg-muted text-muted-foreground hover:bg-muted/80'
                     }`}
                   >
-                    {audio.isPlaying ? (
+                    {audio.status === 'generating' ? (
+                      <Loader2 className="w-6 h-6 animate-spin" />
+                    ) : audio.isPlaying ? (
                       <Pause className="w-6 h-6" />
                     ) : (
                       <Play className="w-6 h-6" />
