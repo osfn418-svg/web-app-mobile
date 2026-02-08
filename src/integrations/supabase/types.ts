@@ -227,6 +227,13 @@ export type Database = {
             referencedRelation: "admin_notifications"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "notification_reads_notification_id_fkey"
+            columns: ["notification_id"]
+            isOneToOne: false
+            referencedRelation: "public_notifications"
+            referencedColumns: ["id"]
+          },
         ]
       }
       profiles: {
@@ -430,7 +437,36 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      public_notifications: {
+        Row: {
+          created_at: string | null
+          expires_at: string | null
+          id: string | null
+          is_active: boolean | null
+          message: string | null
+          title: string | null
+          type: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          expires_at?: string | null
+          id?: string | null
+          is_active?: boolean | null
+          message?: string | null
+          title?: string | null
+          type?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          expires_at?: string | null
+          id?: string | null
+          is_active?: boolean | null
+          message?: string | null
+          title?: string | null
+          type?: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       has_role: {

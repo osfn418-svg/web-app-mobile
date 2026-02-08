@@ -1,11 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { encode as base64Encode } from "https://deno.land/std@0.168.0/encoding/base64.ts";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
-};
+import { validateAuth, unauthorizedResponse, corsHeaders } from "../_shared/auth.ts";
 
 type GenerateBody = {
   action?: "generate";
@@ -92,6 +87,12 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  // Validate authentication
+  const { user, error: authError } = await validateAuth(req);
+  if (authError || !user) {
+    return unauthorizedResponse(authError || "غير مصرح");
+  }
+
   try {
     const body = (await req.json()) as GenerateBody | CheckBody;
     const AIML_API_KEY = Deno.env.get("AIML_API_KEY");
@@ -109,6 +110,8 @@ serve(async (req) => {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
+
+      console.log("Checking TTS status for user:", user.id);
 
       const fetched = await tryFetchAudioBase64(audioUrl);
       if (fetched.status === "completed") {
@@ -156,6 +159,8 @@ serve(async (req) => {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+
+    console.log("Starting TTS for user:", user.id);
 
     const ttsResp = await fetch("https://api.aimlapi.com/v1/tts", {
       method: "POST",
@@ -250,4 +255,3 @@ serve(async (req) => {
     });
   }
 });
-
