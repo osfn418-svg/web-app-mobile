@@ -11,6 +11,7 @@ import {
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useActivityLogger } from '@/hooks/useActivityLogger';
+import { supabase } from '@/integrations/supabase/client';
 
 interface GeneratedImage {
   id: string;
@@ -36,11 +37,20 @@ export default function ImageGeneratorPage() {
     setLoading(true);
     
     try {
+      // Get user session token
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (!session?.access_token) {
+        toast.error('يجب تسجيل الدخول أولاً');
+        setLoading(false);
+        return;
+      }
+
       const response = await fetch(IMAGE_URL, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+          'Authorization': `Bearer ${session.access_token}`,
         },
         body: JSON.stringify({ prompt }),
       });
