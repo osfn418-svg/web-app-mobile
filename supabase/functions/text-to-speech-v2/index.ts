@@ -22,7 +22,8 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 async function tryFetchAudioBase64(audioUrl: string): Promise<
   | { status: "completed"; audioData: string }
-  | { status: "pending" }
+  | { status: "pending"; lastHttpStatus?: number }
+  | { status: "failed"; httpStatus?: number; message: string; details?: string }
 > {
   // The CDN object may not exist yet right after generation.
   // Keep this short; client can poll if still pending.
@@ -33,12 +34,31 @@ async function tryFetchAudioBase64(audioUrl: string): Promise<
   for (const d of retryDelaysMs) {
     if (d) await sleep(d);
 
-    const resp = await fetch(audioUrl);
+    let resp: Response;
+    try {
+      resp = await fetch(audioUrl, {
+        redirect: "follow",
+        headers: {
+          // بعض CDN تحجب الـ default user-agent الخاص بـ Deno
+          "User-Agent": "Mozilla/5.0 (compatible; LovableCloud/1.0)",
+          Accept: "audio/mpeg,audio/*;q=0.9,*/*;q=0.8",
+          "Cache-Control": "no-cache",
+          Pragma: "no-cache",
+        },
+      });
+    } catch (e) {
+      return {
+        status: "failed",
+        message: "تعذر الاتصال بمصدر ملف الصوت",
+        details: e instanceof Error ? e.message : String(e),
+      };
+    }
+
     lastStatus = resp.status;
 
     if (resp.ok) {
       const audioBuffer = await resp.arrayBuffer();
-      const base64Audio = base64Encode(audioBuffer);
+      const base64Audio = base64Encode(new Uint8Array(audioBuffer));
       return { status: "completed", audioData: base64Audio };
     }
 
@@ -48,18 +68,22 @@ async function tryFetchAudioBase64(audioUrl: string): Promise<
       continue;
     }
 
-    // Any other failure: stop early (auth/blocked/etc.)
+    // Any other failure: return a real failure so the UI doesn't spin forever.
     lastBody = await resp.text().catch(() => "");
     console.error("Audio fetch failed:", resp.status, lastBody);
-    break;
+    return {
+      status: "failed",
+      httpStatus: resp.status,
+      message: "تعذر تحميل ملف الصوت",
+      details: lastBody.slice(0, 600),
+    };
   }
 
   // If we repeatedly got 404, treat as pending.
-  if (lastStatus === 404) return { status: "pending" };
+  if (lastStatus === 404) return { status: "pending", lastHttpStatus: lastStatus };
 
-  // Otherwise also treat as pending to avoid 500 loops; client can retry.
-  console.error("Audio not ready or fetch blocked:", lastStatus, lastBody);
-  return { status: "pending" };
+  // Fallback: treat as pending (safe) but provide last status.
+  return { status: "pending", lastHttpStatus: lastStatus || undefined };
 }
 
 serve(async (req) => {
@@ -98,9 +122,29 @@ serve(async (req) => {
         );
       }
 
-      return new Response(JSON.stringify({ success: true, status: "pending" }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      if (fetched.status === "failed") {
+        return new Response(
+          JSON.stringify({
+            success: true,
+            status: "failed",
+            error: fetched.message,
+            httpStatus: fetched.httpStatus,
+            details: fetched.details,
+          }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          status: "pending",
+          lastHttpStatus: fetched.lastHttpStatus,
+        }),
+        {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
     }
 
     // --- GENERATE ---
@@ -169,12 +213,27 @@ serve(async (req) => {
       );
     }
 
+    if (fetched.status === "failed") {
+      return new Response(
+        JSON.stringify({
+          success: true,
+          status: "failed",
+          error: fetched.message,
+          httpStatus: fetched.httpStatus,
+          details: fetched.details,
+          format: "mp3",
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     // Not ready yet — return URL so client can poll.
     return new Response(
       JSON.stringify({
         success: true,
         status: "pending",
         audioUrl,
+        lastHttpStatus: fetched.lastHttpStatus,
         format: "mp3",
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }

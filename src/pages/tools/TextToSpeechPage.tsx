@@ -65,8 +65,8 @@ export default function TextToSpeechPage() {
 
     const startedAt = Date.now();
     const intervalId = window.setInterval(async () => {
-      // Stop polling after 90s to avoid infinite loops
-      if (Date.now() - startedAt > 90_000) {
+      // Stop polling after 4min to avoid infinite loops (AIML CDN قد يتأخر أكثر من 90ث)
+      if (Date.now() - startedAt > 240_000) {
         window.clearInterval(intervalId);
         delete pollingRef.current[audioId];
         setAudios((prev) => prev.map((a) => (a.id === audioId ? { ...a, status: 'failed' } : a)));
@@ -108,6 +108,15 @@ export default function TextToSpeechPage() {
           window.clearInterval(intervalId);
           delete pollingRef.current[audioId];
           toast.success('تم إنشاء الصوت بنجاح!');
+          return;
+        }
+
+        if (data.status === 'failed') {
+          window.clearInterval(intervalId);
+          delete pollingRef.current[audioId];
+          setAudios((prev) => prev.map((a) => (a.id === audioId ? { ...a, status: 'failed' } : a)));
+          toast.error(data.error || 'تعذر تحميل ملف الصوت');
+          return;
         }
       } catch {
         // Silent retry; we'll keep polling.
@@ -193,6 +202,11 @@ export default function TextToSpeechPage() {
         toast.message('جاري تجهيز الصوت...');
 
         startPolling(audioId, data.audioUrl);
+        return;
+      }
+
+      if (data.status === 'failed') {
+        toast.error(data.error || 'تعذر تحميل ملف الصوت');
         return;
       }
 
