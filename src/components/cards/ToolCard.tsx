@@ -1,8 +1,21 @@
 import { motion } from 'framer-motion';
 import { Lock, Star } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { AITool } from '@/lib/database';
 import { useAuth } from '@/contexts/AuthContext';
+
+// Legacy type to keep compatibility
+export interface AITool {
+  tool_id: number | string;
+  tool_name: string;
+  tool_description: string;
+  tool_url: string;
+  logo_url: string;
+  requires_subscription: boolean;
+  rating: number;
+  category_id: number;
+  added_by_admin: number;
+  approved: boolean;
+}
 
 interface ToolCardProps {
   tool: AITool;
@@ -65,7 +78,7 @@ export default function ToolCard({ tool, variant = 'default' }: ToolCardProps) {
           
           <div className="flex items-center gap-1 mt-3 text-warning">
             <Star className="w-4 h-4 fill-current" />
-            <span className="text-sm font-medium">{tool.rating.toFixed(1)}</span>
+            <span className="text-sm font-medium">{(tool.rating ?? 0).toFixed(1)}</span>
           </div>
         </div>
 

@@ -1,16 +1,12 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { 
   ArrowRight, 
-  Send, 
   Download, 
   Sparkles,
-  Image as ImageIcon,
   Loader2
 } from 'lucide-react';
-import { Link, useParams } from 'react-router-dom';
-import { useAuth } from '@/contexts/AuthContext';
-import { db, AITool } from '@/lib/database';
+import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
 
 interface GeneratedImage {
@@ -21,11 +17,8 @@ interface GeneratedImage {
 }
 
 export default function ImageGeneratorPage() {
-  const { toolId } = useParams();
-  const { user } = useAuth();
   const [prompt, setPrompt] = useState('');
   const [loading, setLoading] = useState(false);
-  const [tool, setTool] = useState<AITool | null>(null);
   const [images, setImages] = useState<GeneratedImage[]>([]);
   const [style, setStyle] = useState('realistic');
 
@@ -35,17 +28,6 @@ export default function ImageGeneratorPage() {
     { id: 'digital-art', label: 'فن رقمي', emoji: '🖼️' },
     { id: '3d', label: 'ثلاثي الأبعاد', emoji: '🎮' },
   ];
-
-  useEffect(() => {
-    const loadTool = async () => {
-      const tools = await db.ai_tools.toArray();
-      const foundTool = tools.find(t => t.tool_url === `/tools/${toolId}`);
-      if (foundTool) {
-        setTool(foundTool);
-      }
-    };
-    loadTool();
-  }, [toolId]);
 
   const generateImage = async () => {
     if (!prompt.trim() || loading) return;
@@ -81,7 +63,7 @@ export default function ImageGeneratorPage() {
     }
   };
 
-  const handleDownload = async (imageUrl: string, prompt: string) => {
+  const handleDownload = async (imageUrl: string) => {
     try {
       const response = await fetch(imageUrl);
       const blob = await response.blob();
@@ -109,10 +91,10 @@ export default function ImageGeneratorPage() {
           </Link>
           <div className="flex items-center gap-3 flex-1">
             <div className="w-10 h-10 rounded-xl bg-muted flex items-center justify-center text-xl">
-              {tool?.logo_url || '🖼️'}
+              🖼️
             </div>
             <div>
-              <h1 className="font-semibold text-foreground">{tool?.tool_name || 'توليد الصور'}</h1>
+              <h1 className="font-semibold text-foreground">توليد الصور</h1>
               <p className="text-xs text-muted-foreground">حوّل خيالك إلى صور مذهلة</p>
             </div>
           </div>
@@ -183,7 +165,7 @@ export default function ImageGeneratorPage() {
                   <div className="absolute bottom-0 left-0 right-0 p-3">
                     <p className="text-xs text-foreground line-clamp-2 mb-2">{image.prompt}</p>
                     <button
-                      onClick={() => handleDownload(image.url, image.prompt)}
+                      onClick={() => handleDownload(image.url)}
                       className="w-full py-2 bg-primary text-primary-foreground rounded-lg text-sm flex items-center justify-center gap-2"
                     >
                       <Download className="w-4 h-4" />

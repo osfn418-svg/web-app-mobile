@@ -1,22 +1,16 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { 
   ArrowRight, 
-  Sparkles,
   Copy,
   RefreshCw,
   Check,
   Wand2
 } from 'lucide-react';
-import { Link, useParams } from 'react-router-dom';
-import { useAuth } from '@/contexts/AuthContext';
-import { db, AITool } from '@/lib/database';
+import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
 
 export default function PromptMakerPage() {
-  const { toolId } = useParams();
-  const { user } = useAuth();
-  const [tool, setTool] = useState<AITool | null>(null);
   const [topic, setTopic] = useState('');
   const [style, setStyle] = useState('creative');
   const [generatedPrompts, setGeneratedPrompts] = useState<string[]>([]);
@@ -29,17 +23,6 @@ export default function PromptMakerPage() {
     { id: 'simple', label: 'بسيط', emoji: '✨' },
     { id: 'detailed', label: 'تفصيلي', emoji: '📝' },
   ];
-
-  useEffect(() => {
-    const loadTool = async () => {
-      const tools = await db.ai_tools.toArray();
-      const foundTool = tools.find(t => t.tool_url === `/tools/${toolId}`);
-      if (foundTool) {
-        setTool(foundTool);
-      }
-    };
-    loadTool();
-  }, [toolId]);
 
   const generatePrompts = async () => {
     if (!topic.trim() || loading) return;
@@ -98,10 +81,10 @@ export default function PromptMakerPage() {
           </Link>
           <div className="flex items-center gap-3 flex-1">
             <div className="w-10 h-10 rounded-xl bg-muted flex items-center justify-center text-xl">
-              {tool?.logo_url || '✨'}
+              ✨
             </div>
             <div>
-              <h1 className="font-semibold text-foreground">{tool?.tool_name || 'صانع الأوامر'}</h1>
+              <h1 className="font-semibold text-foreground">صانع الأوامر</h1>
               <p className="text-xs text-muted-foreground">إنشاء prompts احترافية</p>
             </div>
           </div>
