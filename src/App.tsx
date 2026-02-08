@@ -51,7 +51,7 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
 // Admin Route Component
 function AdminRoute({ children }: { children: React.ReactNode }) {
-  const { user, isLoading } = useAuth();
+  const { user, isLoading, isAdmin } = useAuth();
 
   if (isLoading) {
     return (
@@ -61,7 +61,7 @@ function AdminRoute({ children }: { children: React.ReactNode }) {
     );
   }
 
-  if (!user || user.role !== 'admin') {
+  if (!user || !isAdmin) {
     return <Navigate to="/home" replace />;
   }
 

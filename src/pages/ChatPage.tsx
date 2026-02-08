@@ -3,69 +3,51 @@ import { motion } from 'framer-motion';
 import { 
   ArrowRight, 
   Send, 
-  Image as ImageIcon, 
-  Mic, 
-  Download, 
   Copy, 
   RefreshCw,
   Sparkles
 } from 'lucide-react';
 import { Link, useParams } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
-import { saveChat, db, AITool } from '@/lib/database';
+import { streamChat } from '@/lib/chatService';
 import { toast } from 'sonner';
+import ReactMarkdown from 'react-markdown';
 
 interface Message {
   id: string;
   role: 'user' | 'assistant';
   content: string;
-  timestamp: Date;
-  image?: string;
 }
+
+const toolInfo: Record<string, { name: string; icon: string; type: string }> = {
+  assistant: { name: 'الذكاء المساعد', icon: '🤖', type: 'assistant' },
+  code: { name: 'محرر الأكواد', icon: '💻', type: 'code' },
+  document: { name: 'محلل المستندات', icon: '📄', type: 'document' },
+  'prompt-maker': { name: 'صانع الأوامر', icon: '✨', type: 'prompt' },
+};
 
 export default function ChatPage() {
   const { toolId } = useParams();
-  const { user } = useAuth();
+  const { profile } = useAuth();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
-  const [tool, setTool] = useState<AITool | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
+  const tool = toolInfo[toolId || 'assistant'] || toolInfo.assistant;
+
   useEffect(() => {
-    const loadTool = async () => {
-      const tools = await db.ai_tools.toArray();
-      const foundTool = tools.find(t => t.tool_url === `/tools/${toolId}`);
-      if (foundTool) {
-        setTool(foundTool);
-        // Welcome message
-        setMessages([{
-          id: '1',
-          role: 'assistant',
-          content: `مرحباً ${user?.full_name || ''}! 👋 أنا ${foundTool.tool_name}. يمكنك سؤالي عن أي شيء أو طلب توليد صورة إبداعية.`,
-          timestamp: new Date(),
-        }]);
-      }
-    };
-    loadTool();
-  }, [toolId, user]);
+    // Welcome message
+    setMessages([{
+      id: '1',
+      role: 'assistant',
+      content: `مرحباً ${profile?.full_name || ''}! 👋 أنا ${tool.name}. كيف يمكنني مساعدتك اليوم؟`,
+    }]);
+  }, [toolId, profile]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
-
-  const generateResponse = async (userMessage: string): Promise<string> => {
-    // Simulate AI response - In production, connect to real AI API
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    
-    const responses = [
-      `شكراً على سؤالك! بناءً على طلبك "${userMessage.slice(0, 30)}..."، إليك إجابتي:\n\nيمكنني مساعدتك في هذا الموضوع. هل تريد المزيد من التفاصيل؟`,
-      `هذا سؤال رائع! 🌟\n\nبخصوص "${userMessage.slice(0, 20)}..."، أقترح عليك:\n\n1. البدء بتحديد الهدف الأساسي\n2. جمع المعلومات اللازمة\n3. وضع خطة عمل واضحة`,
-      `أفهم ما تحتاجه! 💡\n\nبناءً على طلبك، إليك بعض الأفكار المفيدة:\n\n• النقطة الأولى: التخطيط الجيد\n• النقطة الثانية: التنفيذ المرحلي\n• النقطة الثالثة: المراجعة والتحسين`,
-    ];
-    
-    return responses[Math.floor(Math.random() * responses.length)];
-  };
 
   const handleSend = async () => {
     if (!input.trim() || loading) return;
@@ -74,38 +56,48 @@ export default function ChatPage() {
       id: Date.now().toString(),
       role: 'user',
       content: input,
-      timestamp: new Date(),
     };
 
     setMessages(prev => [...prev, userMessage]);
     setInput('');
     setLoading(true);
 
+    let assistantContent = '';
+
+    const updateAssistant = (chunk: string) => {
+      assistantContent += chunk;
+      setMessages(prev => {
+        const last = prev[prev.length - 1];
+        if (last?.role === 'assistant' && last.id === 'streaming') {
+          return prev.map((m, i) => 
+            i === prev.length - 1 ? { ...m, content: assistantContent } : m
+          );
+        }
+        return [...prev, { id: 'streaming', role: 'assistant', content: assistantContent }];
+      });
+    };
+
     try {
-      const response = await generateResponse(input);
-      
-      const assistantMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        role: 'assistant',
-        content: response,
-        timestamp: new Date(),
-      };
-
-      setMessages(prev => [...prev, assistantMessage]);
-
-      // Save to database
-      if (user?.user_id && tool?.tool_id) {
-        await saveChat({
-          user_id: user.user_id,
-          tool_id: tool.tool_id,
-          user_message: input,
-          ai_response: response,
-          created_at: new Date(),
-        });
-      }
+      await streamChat({
+        messages: messages.filter(m => m.id !== '1').concat(userMessage).map(m => ({
+          role: m.role,
+          content: m.content
+        })),
+        toolType: tool.type,
+        onDelta: updateAssistant,
+        onDone: () => {
+          setMessages(prev => 
+            prev.map(m => m.id === 'streaming' ? { ...m, id: Date.now().toString() } : m)
+          );
+          setLoading(false);
+        },
+        onError: (error) => {
+          toast.error(error);
+          setLoading(false);
+        }
+      });
     } catch (error) {
       toast.error('حدث خطأ أثناء معالجة الطلب');
-    } finally {
       setLoading(false);
     }
   };
@@ -113,6 +105,55 @@ export default function ChatPage() {
   const handleCopy = (text: string) => {
     navigator.clipboard.writeText(text);
     toast.success('تم النسخ');
+  };
+
+  const handleRegenerate = async (messageIndex: number) => {
+    const previousMessages = messages.slice(0, messageIndex);
+    const userMessage = previousMessages[previousMessages.length - 1];
+    
+    if (userMessage?.role !== 'user') return;
+
+    setMessages(previousMessages);
+    setLoading(true);
+
+    let assistantContent = '';
+
+    const updateAssistant = (chunk: string) => {
+      assistantContent += chunk;
+      setMessages(prev => {
+        const last = prev[prev.length - 1];
+        if (last?.role === 'assistant' && last.id === 'streaming') {
+          return prev.map((m, i) => 
+            i === prev.length - 1 ? { ...m, content: assistantContent } : m
+          );
+        }
+        return [...prev, { id: 'streaming', role: 'assistant', content: assistantContent }];
+      });
+    };
+
+    try {
+      await streamChat({
+        messages: previousMessages.filter(m => m.id !== '1').map(m => ({
+          role: m.role,
+          content: m.content
+        })),
+        toolType: tool.type,
+        onDelta: updateAssistant,
+        onDone: () => {
+          setMessages(prev => 
+            prev.map(m => m.id === 'streaming' ? { ...m, id: Date.now().toString() } : m)
+          );
+          setLoading(false);
+        },
+        onError: (error) => {
+          toast.error(error);
+          setLoading(false);
+        }
+      });
+    } catch (error) {
+      toast.error('حدث خطأ');
+      setLoading(false);
+    }
   };
 
   return (
@@ -125,31 +166,21 @@ export default function ChatPage() {
           </Link>
           <div className="flex items-center gap-3 flex-1">
             <div className="w-10 h-10 rounded-xl bg-muted flex items-center justify-center text-xl">
-              {tool?.logo_url || '🤖'}
+              {tool.icon}
             </div>
             <div>
-              <h1 className="font-semibold text-foreground">{tool?.tool_name || 'المساعد'}</h1>
+              <h1 className="font-semibold text-foreground">{tool.name}</h1>
               <p className="text-xs text-success flex items-center gap-1">
                 <span className="w-2 h-2 bg-success rounded-full pulse-dot"></span>
-                متصل
+                متصل بـ AI حقيقي
               </p>
             </div>
           </div>
           <div className="flex gap-2">
-            <button className="px-3 py-1.5 bg-primary/20 text-primary rounded-lg text-sm font-medium">
-              GPT-4
-            </button>
+            <span className="px-3 py-1.5 bg-primary/20 text-primary rounded-lg text-sm font-medium">
+              Gemini 3
+            </span>
           </div>
-        </div>
-        
-        {/* Mode Toggle */}
-        <div className="flex gap-2 mt-3">
-          <button className="flex-1 py-2 bg-primary text-primary-foreground rounded-xl text-sm font-medium">
-            محادثة ذكية
-          </button>
-          <button className="flex-1 py-2 bg-muted text-muted-foreground rounded-xl text-sm font-medium">
-            توليد صور
-          </button>
         </div>
       </header>
 
@@ -160,7 +191,6 @@ export default function ChatPage() {
             key={message.id}
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: index * 0.05 }}
             className={`flex ${message.role === 'user' ? 'justify-start' : 'justify-end'}`}
           >
             <div
@@ -170,26 +200,28 @@ export default function ChatPage() {
                   : 'glass-card rounded-tl-sm'
               }`}
             >
-              <p className="text-sm whitespace-pre-wrap">{message.content}</p>
-              
-              {message.image && (
-                <div className="mt-3 rounded-xl overflow-hidden">
-                  <img src={message.image} alt="Generated" className="w-full" />
+              {message.role === 'assistant' ? (
+                <div className="prose prose-sm dark:prose-invert max-w-none">
+                  <ReactMarkdown>{message.content}</ReactMarkdown>
                 </div>
+              ) : (
+                <p className="text-sm whitespace-pre-wrap">{message.content}</p>
               )}
 
-              {message.role === 'assistant' && (
+              {message.role === 'assistant' && message.id !== '1' && message.id !== 'streaming' && (
                 <div className="flex gap-2 mt-3 pt-3 border-t border-border">
                   <button
                     onClick={() => handleCopy(message.content)}
                     className="p-2 hover:bg-muted rounded-lg transition-colors"
+                    title="نسخ"
                   >
                     <Copy className="w-4 h-4 text-muted-foreground" />
                   </button>
-                  <button className="p-2 hover:bg-muted rounded-lg transition-colors">
-                    <Download className="w-4 h-4 text-muted-foreground" />
-                  </button>
-                  <button className="p-2 hover:bg-muted rounded-lg transition-colors">
+                  <button 
+                    onClick={() => handleRegenerate(index)}
+                    className="p-2 hover:bg-muted rounded-lg transition-colors"
+                    title="إعادة التوليد"
+                  >
                     <RefreshCw className="w-4 h-4 text-muted-foreground" />
                   </button>
                 </div>
@@ -198,7 +230,7 @@ export default function ChatPage() {
           </motion.div>
         ))}
 
-        {loading && (
+        {loading && messages[messages.length - 1]?.role !== 'assistant' && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -219,12 +251,6 @@ export default function ChatPage() {
       {/* Input */}
       <footer className="glass sticky bottom-0 px-4 py-4 safe-bottom">
         <div className="flex items-center gap-2">
-          <button className="p-3 hover:bg-muted rounded-xl transition-colors">
-            <ImageIcon className="w-5 h-5 text-muted-foreground" />
-          </button>
-          <button className="p-3 hover:bg-muted rounded-xl transition-colors">
-            <Mic className="w-5 h-5 text-muted-foreground" />
-          </button>
           <div className="flex-1 relative">
             <input
               type="text"
@@ -233,6 +259,7 @@ export default function ChatPage() {
               onKeyPress={(e) => e.key === 'Enter' && handleSend()}
               placeholder="اكتب رسالتك هنا..."
               className="w-full px-4 py-3 bg-muted border border-border rounded-xl text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary transition-colors"
+              disabled={loading}
             />
           </div>
           <motion.button
