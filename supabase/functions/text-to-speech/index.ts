@@ -7,11 +7,78 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-type Body = {
+type GenerateBody = {
+  action?: "generate";
   text?: string;
   voice?: string;
   speed?: number;
 };
+
+type CheckBody = {
+  action: "check";
+  audioUrl?: string;
+};
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+async function tryFetchAudioBase64(audioUrl: string): Promise<
+  | { status: "completed"; audioData: string }
+  | { status: "pending"; lastHttpStatus?: number }
+  | { status: "failed"; httpStatus?: number; message: string; details?: string }
+> {
+  // CDN object may appear with delay. Keep each check short; client will poll.
+  const retryDelaysMs = [0, 700, 1500, 2500];
+  let lastStatus = 0;
+  let lastBody = "";
+
+  for (const d of retryDelaysMs) {
+    if (d) await sleep(d);
+
+    let resp: Response;
+    try {
+      resp = await fetch(audioUrl, {
+        redirect: "follow",
+        headers: {
+          "User-Agent": "Mozilla/5.0 (compatible; LovableCloud/1.0)",
+          Accept: "audio/mpeg,audio/*;q=0.9,*/*;q=0.8",
+          "Cache-Control": "no-cache",
+          Pragma: "no-cache",
+        },
+      });
+    } catch (e) {
+      return {
+        status: "failed",
+        message: "تعذر الاتصال بمصدر ملف الصوت",
+        details: e instanceof Error ? e.message : String(e),
+      };
+    }
+
+    lastStatus = resp.status;
+
+    if (resp.ok) {
+      const audioBuffer = await resp.arrayBuffer();
+      const base64Audio = base64Encode(new Uint8Array(audioBuffer));
+      return { status: "completed", audioData: base64Audio };
+    }
+
+    if (resp.status === 404) {
+      lastBody = await resp.text().catch(() => "");
+      continue;
+    }
+
+    lastBody = await resp.text().catch(() => "");
+    console.error("Audio fetch failed:", resp.status, lastBody);
+    return {
+      status: "failed",
+      httpStatus: resp.status,
+      message: "تعذر تحميل ملف الصوت",
+      details: lastBody.slice(0, 600),
+    };
+  }
+
+  if (lastStatus === 404) return { status: "pending", lastHttpStatus: lastStatus };
+  return { status: "pending", lastHttpStatus: lastStatus || undefined };
+}
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -19,12 +86,63 @@ serve(async (req) => {
   }
 
   try {
-    const { text, voice, speed } = (await req.json()) as Body;
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+    const body = (await req.json()) as GenerateBody | CheckBody;
+    const AIML_API_KEY = Deno.env.get("AIML_API_KEY");
 
-    if (!LOVABLE_API_KEY) {
-      throw new Error("LOVABLE_API_KEY is not configured");
+    if (!AIML_API_KEY) {
+      throw new Error("AIML_API_KEY is not configured");
     }
+
+    // --- CHECK ---
+    if ((body as CheckBody).action === "check") {
+      const { audioUrl } = body as CheckBody;
+
+      if (!audioUrl) {
+        return new Response(JSON.stringify({ error: "audioUrl مطلوب" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const fetched = await tryFetchAudioBase64(audioUrl);
+
+      if (fetched.status === "completed") {
+        return new Response(
+          JSON.stringify({
+            success: true,
+            status: "completed",
+            audioData: fetched.audioData,
+            format: "mp3",
+          }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      if (fetched.status === "failed") {
+        return new Response(
+          JSON.stringify({
+            success: true,
+            status: "failed",
+            error: fetched.message,
+            httpStatus: fetched.httpStatus,
+            details: fetched.details,
+          }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          status: "pending",
+          lastHttpStatus: fetched.lastHttpStatus,
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // --- GENERATE ---
+    const { text, voice, speed } = body as GenerateBody;
 
     if (!text || text.trim().length === 0) {
       return new Response(JSON.stringify({ error: "النص مطلوب" }), {
@@ -35,34 +153,33 @@ serve(async (req) => {
 
     console.log("Generating TTS for text:", text.substring(0, 50) + "...");
 
-    // Response is binary audio data
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/audio/speech", {
+    const ttsResp = await fetch("https://api.aimlapi.com/v1/tts", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
+        Authorization: `Bearer ${AIML_API_KEY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
         model: "openai/tts-1",
-        input: text,
+        text: text.trim(),
         voice: voice || "alloy",
         speed: typeof speed === "number" ? speed : undefined,
         response_format: "mp3",
       }),
     });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error("Lovable AI TTS error:", response.status, errorText);
+    if (!ttsResp.ok) {
+      const errorText = await ttsResp.text();
+      console.error("AIML TTS error:", ttsResp.status, errorText);
 
-      if (response.status === 429) {
+      if (ttsResp.status === 429) {
         return new Response(JSON.stringify({ error: "تم تجاوز حد الاستخدام" }), {
           status: 429,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
 
-      if (response.status === 402) {
+      if (ttsResp.status === 402) {
         return new Response(JSON.stringify({ error: "يرجى إضافة رصيد لحسابك" }), {
           status: 402,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -75,20 +192,58 @@ serve(async (req) => {
       });
     }
 
-    const audioBuffer = await response.arrayBuffer();
-    console.log("Audio generated, size:", audioBuffer.byteLength, "bytes");
+    const ttsJson = await ttsResp.json();
+    const audioUrl =
+      (ttsJson?.audio?.url as string | undefined) ||
+      (ttsJson?.audioUrl as string | undefined) ||
+      (ttsJson?.url as string | undefined);
 
-    const base64Audio = base64Encode(new Uint8Array(audioBuffer));
+    if (!audioUrl) {
+      console.error("No audio URL in response:", JSON.stringify(ttsJson));
+      return new Response(JSON.stringify({ error: "لم يتم استلام رابط الصوت" }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Quick attempt: if CDN is ready fast, return Base64 immediately; otherwise return pending + URL.
+    const fetched = await tryFetchAudioBase64(audioUrl);
+
+    if (fetched.status === "completed") {
+      return new Response(
+        JSON.stringify({
+          success: true,
+          status: "completed",
+          audioData: fetched.audioData,
+          format: "mp3",
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    if (fetched.status === "failed") {
+      return new Response(
+        JSON.stringify({
+          success: true,
+          status: "failed",
+          error: fetched.message,
+          httpStatus: fetched.httpStatus,
+          details: fetched.details,
+          format: "mp3",
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
     return new Response(
       JSON.stringify({
         success: true,
-        audioData: base64Audio,
+        status: "pending",
+        audioUrl,
+        lastHttpStatus: fetched.lastHttpStatus,
         format: "mp3",
       }),
-      {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      }
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (e) {
     console.error("TTS error:", e);
