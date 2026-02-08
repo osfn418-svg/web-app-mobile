@@ -19,13 +19,48 @@ export interface AITool {
 
 interface ToolCardProps {
   tool: AITool;
-  variant?: 'default' | 'compact';
+  variant?: 'default' | 'compact' | 'mini';
 }
 
 export default function ToolCard({ tool, variant = 'default' }: ToolCardProps) {
   const { isPro } = useAuth();
   const isLocked = tool.requires_subscription && !isPro;
 
+  // Mini variant - smallest, 3 per row
+  if (variant === 'mini') {
+    return (
+      <Link to={isLocked ? '/subscription' : tool.tool_url}>
+        <motion.div
+          whileHover={{ scale: 1.03 }}
+          whileTap={{ scale: 0.97 }}
+          className="glass-card rounded-xl p-3 neon-border relative overflow-hidden group"
+        >
+          <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-br from-primary/10 to-secondary/10" />
+          
+          {tool.requires_subscription && (
+            <div className="absolute top-1 left-1 z-20">
+              <span className="pro-badge text-[10px] px-1.5 py-0.5">PRO</span>
+            </div>
+          )}
+          
+          <div className="relative z-10 flex flex-col items-center text-center">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-secondary flex items-center justify-center text-lg mb-2 shadow-md">
+              {tool.logo_url}
+            </div>
+            <h3 className="font-medium text-foreground text-xs line-clamp-1">{tool.tool_name}</h3>
+          </div>
+
+          {isLocked && (
+            <div className="absolute inset-0 bg-background/60 backdrop-blur-sm flex items-center justify-center z-30">
+              <Lock className="w-5 h-5 text-muted-foreground" />
+            </div>
+          )}
+        </motion.div>
+      </Link>
+    );
+  }
+
+  // Compact variant - horizontal layout
   if (variant === 'compact') {
     return (
       <Link to={isLocked ? '/subscription' : tool.tool_url}>
@@ -59,6 +94,7 @@ export default function ToolCard({ tool, variant = 'default' }: ToolCardProps) {
     );
   }
 
+  // Default variant - standard card
   return (
     <Link to={isLocked ? '/subscription' : tool.tool_url}>
       <motion.div

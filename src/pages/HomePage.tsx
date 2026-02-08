@@ -146,34 +146,37 @@ export default function HomePage() {
             </Link>
           </motion.div>
 
-          {/* Tools grid */}
+          {/* Tools grid - 3 columns with mini cards */}
           {toolsLoading ? (
-            <div className="grid grid-cols-2 gap-3">
-              {[1,2,3,4].map(i => (
-                <div key={i} className="glass-card rounded-xl p-4 h-32 animate-pulse bg-muted" />
+            <div className="grid grid-cols-3 gap-2">
+              {[1,2,3,4,5,6].map(i => (
+                <div key={i} className="glass-card rounded-xl p-3 h-20 animate-pulse bg-muted" />
               ))}
             </div>
           ) : (
-            <div className="grid grid-cols-2 gap-3">
-              {filteredTools.slice(0, 6).map((tool: any, index: number) => (
+            <div className="grid grid-cols-3 gap-2">
+              {filteredTools.slice(0, 9).map((tool: any, index: number) => (
                 <motion.div
                   key={tool.id}
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.1 * index }}
+                  transition={{ delay: 0.05 * index }}
                 >
-                  <ToolCard tool={{
-                    tool_id: tool.id,
-                    tool_name: tool.name,
-                    tool_description: tool.description,
-                    tool_url: tool.url,
-                    logo_url: tool.logo_url,
-                    requires_subscription: tool.requires_subscription,
-                    rating: tool.rating,
-                    category_id: 0,
-                    added_by_admin: 0,
-                    approved: true
-                  }} />
+                  <ToolCard 
+                    variant="mini"
+                    tool={{
+                      tool_id: tool.id,
+                      tool_name: tool.name,
+                      tool_description: tool.description,
+                      tool_url: tool.url,
+                      logo_url: tool.logo_url,
+                      requires_subscription: tool.requires_subscription,
+                      rating: tool.rating,
+                      category_id: 0,
+                      added_by_admin: 0,
+                      approved: true
+                    }} 
+                  />
                 </motion.div>
               ))}
             </div>
