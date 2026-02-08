@@ -16,6 +16,8 @@ interface GeneratedImage {
   timestamp: Date;
 }
 
+const IMAGE_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-image`;
+
 export default function ImageGeneratorPage() {
   const [prompt, setPrompt] = useState('');
   const [loading, setLoading] = useState(false);
@@ -35,21 +37,42 @@ export default function ImageGeneratorPage() {
     setLoading(true);
     
     try {
-      // Simulate AI image generation
-      await new Promise(resolve => setTimeout(resolve, 2500));
+      const response = await fetch(IMAGE_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+        },
+        body: JSON.stringify({ 
+          prompt, 
+          style,
+          model: 'flux/schnell'
+        }),
+      });
+
+      if (response.status === 429) {
+        toast.error('تم تجاوز حد الاستخدام، يرجى المحاولة لاحقاً');
+        return;
+      }
+
+      if (!response.ok) {
+        throw new Error('Failed to generate image');
+      }
+
+      const data = await response.json();
       
-      // Use placeholder images for demo
-      const placeholderImages = [
-        'https://images.unsplash.com/photo-1677442136019-21780ecad995?w=512&h=512&fit=crop',
-        'https://images.unsplash.com/photo-1686191128892-3b37add4ab0e?w=512&h=512&fit=crop',
-        'https://images.unsplash.com/photo-1675271591211-126ad94e495d?w=512&h=512&fit=crop',
-        'https://images.unsplash.com/photo-1681412332858-babcc52ac25c?w=512&h=512&fit=crop',
-      ];
-      
+      if (!data.success) {
+        throw new Error(data.error || 'Failed to generate image');
+      }
+
+      const imageUrl = data.isBase64 
+        ? `data:image/png;base64,${data.image}` 
+        : data.image;
+
       const newImage: GeneratedImage = {
         id: Date.now().toString(),
         prompt: prompt,
-        url: placeholderImages[Math.floor(Math.random() * placeholderImages.length)],
+        url: imageUrl,
         timestamp: new Date(),
       };
       
@@ -57,24 +80,36 @@ export default function ImageGeneratorPage() {
       setPrompt('');
       toast.success('تم توليد الصورة بنجاح!');
     } catch (error) {
+      console.error('Image generation error:', error);
       toast.error('حدث خطأ أثناء توليد الصورة');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleDownload = async (imageUrl: string) => {
+  const handleDownload = async (imageUrl: string, imageId: string) => {
     try {
-      const response = await fetch(imageUrl);
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `nexus-ai-${Date.now()}.jpg`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      window.URL.revokeObjectURL(url);
+      // For base64 images
+      if (imageUrl.startsWith('data:')) {
+        const a = document.createElement('a');
+        a.href = imageUrl;
+        a.download = `nexus-ai-${imageId}.png`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+      } else {
+        // For URL images
+        const response = await fetch(imageUrl);
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `nexus-ai-${imageId}.png`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+      }
       toast.success('جاري تحميل الصورة...');
     } catch (error) {
       toast.error('فشل تحميل الصورة');
@@ -95,7 +130,10 @@ export default function ImageGeneratorPage() {
             </div>
             <div>
               <h1 className="font-semibold text-foreground">توليد الصور</h1>
-              <p className="text-xs text-muted-foreground">حوّل خيالك إلى صور مذهلة</p>
+              <p className="text-xs text-success flex items-center gap-1">
+                <span className="w-2 h-2 bg-success rounded-full pulse-dot"></span>
+                متصل بـ AI حقيقي
+              </p>
             </div>
           </div>
         </div>
@@ -165,7 +203,7 @@ export default function ImageGeneratorPage() {
                   <div className="absolute bottom-0 left-0 right-0 p-3">
                     <p className="text-xs text-foreground line-clamp-2 mb-2">{image.prompt}</p>
                     <button
-                      onClick={() => handleDownload(image.url)}
+                      onClick={() => handleDownload(image.url, image.id)}
                       className="w-full py-2 bg-primary text-primary-foreground rounded-lg text-sm flex items-center justify-center gap-2"
                     >
                       <Download className="w-4 h-4" />
@@ -190,6 +228,7 @@ export default function ImageGeneratorPage() {
               onKeyPress={(e) => e.key === 'Enter' && generateImage()}
               placeholder="صف الصورة التي تريد توليدها..."
               className="w-full px-4 py-3 bg-muted border border-border rounded-xl text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary transition-colors"
+              disabled={loading}
             />
           </div>
           <motion.button

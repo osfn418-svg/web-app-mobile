@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { 
   ArrowRight, 
@@ -21,69 +21,80 @@ interface GeneratedAudio {
   timestamp: Date;
   isPlaying: boolean;
   voice: string;
+  audioUrl: string;
 }
+
+const TTS_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/text-to-speech`;
 
 export default function TextToSpeechPage() {
   const [text, setText] = useState('');
   const [loading, setLoading] = useState(false);
   const [audios, setAudios] = useState<GeneratedAudio[]>([]);
-  const [selectedVoice, setSelectedVoice] = useState<SpeechSynthesisVoice | null>(null);
-  const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
-  const [rate, setRate] = useState(1);
-  const [pitch, setPitch] = useState(1);
+  const [selectedVoice, setSelectedVoice] = useState('alloy');
+  const [speed, setSpeed] = useState(1);
   const [showSettings, setShowSettings] = useState(false);
-  const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
   const [currentPlayingId, setCurrentPlayingId] = useState<string | null>(null);
 
-  // Load available voices
-  useEffect(() => {
-    const loadVoices = () => {
-      const availableVoices = window.speechSynthesis.getVoices();
-      setVoices(availableVoices);
-      
-      // Try to find Arabic voice first
-      const arabicVoice = availableVoices.find(v => v.lang.startsWith('ar'));
-      if (arabicVoice) {
-        setSelectedVoice(arabicVoice);
-      } else if (availableVoices.length > 0) {
-        setSelectedVoice(availableVoices[0]);
-      }
-    };
-
-    loadVoices();
-    window.speechSynthesis.onvoiceschanged = loadVoices;
-
-    return () => {
-      window.speechSynthesis.cancel();
-    };
-  }, []);
+  const voices = [
+    { id: 'alloy', label: 'Alloy', description: 'متوازن' },
+    { id: 'echo', label: 'Echo', description: 'ذكوري' },
+    { id: 'fable', label: 'Fable', description: 'بريطاني' },
+    { id: 'onyx', label: 'Onyx', description: 'عميق' },
+    { id: 'nova', label: 'Nova', description: 'أنثوي' },
+    { id: 'shimmer', label: 'Shimmer', description: 'ناعم' },
+  ];
 
   const generateSpeech = async () => {
     if (!text.trim() || loading) return;
     
-    if (!('speechSynthesis' in window)) {
-      toast.error('المتصفح لا يدعم تحويل النص إلى صوت');
-      return;
-    }
-    
     setLoading(true);
     
     try {
-      // Simulate processing time
-      await new Promise(resolve => setTimeout(resolve, 500));
+      const response = await fetch(TTS_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+        },
+        body: JSON.stringify({ 
+          text: text.trim(),
+          voice: selectedVoice,
+          speed: speed,
+        }),
+      });
+
+      if (response.status === 429) {
+        toast.error('تم تجاوز حد الاستخدام، يرجى المحاولة لاحقاً');
+        return;
+      }
+
+      if (!response.ok) {
+        throw new Error('Failed to generate speech');
+      }
+
+      const data = await response.json();
+      
+      if (!data.success) {
+        throw new Error(data.error || 'Failed to generate speech');
+      }
+
+      const audioUrl = data.audioUrl;
       
       const newAudio: GeneratedAudio = {
         id: Date.now().toString(),
         text: text.trim(),
         timestamp: new Date(),
         isPlaying: false,
-        voice: selectedVoice?.name || 'Default',
+        voice: voices.find(v => v.id === selectedVoice)?.label || selectedVoice,
+        audioUrl: audioUrl,
       };
       
       setAudios(prev => [newAudio, ...prev]);
       setText('');
       toast.success('تم إنشاء الصوت بنجاح!');
     } catch (error) {
+      console.error('TTS error:', error);
       toast.error('حدث خطأ أثناء إنشاء الصوت');
     } finally {
       setLoading(false);
@@ -91,8 +102,11 @@ export default function TextToSpeechPage() {
   };
 
   const playAudio = (audio: GeneratedAudio) => {
-    // Stop any current speech
-    window.speechSynthesis.cancel();
+    // Stop current audio if playing
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current = null;
+    }
     
     if (currentPlayingId === audio.id) {
       setCurrentPlayingId(null);
@@ -100,15 +114,10 @@ export default function TextToSpeechPage() {
       return;
     }
 
-    const utterance = new SpeechSynthesisUtterance(audio.text);
-    utterance.rate = rate;
-    utterance.pitch = pitch;
-    
-    if (selectedVoice) {
-      utterance.voice = selectedVoice;
-    }
+    const newAudio = new Audio(audio.audioUrl);
+    audioRef.current = newAudio;
 
-    utterance.onstart = () => {
+    newAudio.onplay = () => {
       setCurrentPlayingId(audio.id);
       setAudios(prev => prev.map(a => ({
         ...a,
@@ -116,52 +125,47 @@ export default function TextToSpeechPage() {
       })));
     };
 
-    utterance.onend = () => {
+    newAudio.onended = () => {
       setCurrentPlayingId(null);
       setAudios(prev => prev.map(a => ({ ...a, isPlaying: false })));
     };
 
-    utterance.onerror = () => {
+    newAudio.onerror = () => {
       setCurrentPlayingId(null);
       setAudios(prev => prev.map(a => ({ ...a, isPlaying: false })));
       toast.error('حدث خطأ أثناء تشغيل الصوت');
     };
 
-    utteranceRef.current = utterance;
-    window.speechSynthesis.speak(utterance);
+    newAudio.play();
   };
 
-  const downloadAsTextFile = (audio: GeneratedAudio) => {
-    // Since Web Speech API doesn't support direct audio download,
-    // we'll create a text file with instructions
-    const content = `النص: ${audio.text}\n\nالصوت: ${audio.voice}\nالسرعة: ${rate}\nالنبرة: ${pitch}\n\nملاحظة: لتحميل الصوت كملف MP3، يمكنك استخدام برامج تسجيل الصوت أثناء التشغيل.`;
-    
-    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `speech-${audio.id}.txt`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    
-    toast.info('تم تحميل ملف النص. للحصول على ملف صوتي، استخدم برنامج تسجيل.');
+  const downloadAudio = async (audio: GeneratedAudio) => {
+    try {
+      const response = await fetch(audio.audioUrl);
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `speech-${audio.id}.mp3`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+      toast.success('جاري تحميل الملف الصوتي...');
+    } catch (error) {
+      toast.error('فشل تحميل الملف الصوتي');
+    }
   };
 
   const deleteAudio = (id: string) => {
-    if (currentPlayingId === id) {
-      window.speechSynthesis.cancel();
+    if (currentPlayingId === id && audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current = null;
       setCurrentPlayingId(null);
     }
     setAudios(prev => prev.filter(a => a.id !== id));
     toast.success('تم حذف الصوت');
   };
-
-  // Group voices by language
-  const arabicVoices = voices.filter(v => v.lang.startsWith('ar'));
-  const englishVoices = voices.filter(v => v.lang.startsWith('en'));
-  const otherVoices = voices.filter(v => !v.lang.startsWith('ar') && !v.lang.startsWith('en'));
 
   return (
     <div className="min-h-screen bg-background flex flex-col" dir="rtl">
@@ -177,7 +181,10 @@ export default function TextToSpeechPage() {
             </div>
             <div>
               <h1 className="font-semibold text-foreground">تحويل النص إلى صوت</h1>
-              <p className="text-xs text-muted-foreground">اكتب النص واستمع إليه</p>
+              <p className="text-xs text-success flex items-center gap-1">
+                <span className="w-2 h-2 bg-success rounded-full pulse-dot"></span>
+                متصل بـ AI حقيقي
+              </p>
             </div>
           </div>
           <button 
@@ -201,67 +208,32 @@ export default function TextToSpeechPage() {
             {/* Voice Selection */}
             <div>
               <label className="text-sm text-muted-foreground mb-2 block">اختر الصوت:</label>
-              <select
-                value={selectedVoice?.name || ''}
-                onChange={(e) => {
-                  const voice = voices.find(v => v.name === e.target.value);
-                  setSelectedVoice(voice || null);
-                }}
-                className="w-full px-3 py-2 bg-background border border-border rounded-xl text-foreground text-sm"
-              >
-                {arabicVoices.length > 0 && (
-                  <optgroup label="العربية">
-                    {arabicVoices.map(voice => (
-                      <option key={voice.name} value={voice.name}>
-                        {voice.name}
-                      </option>
-                    ))}
-                  </optgroup>
-                )}
-                {englishVoices.length > 0 && (
-                  <optgroup label="English">
-                    {englishVoices.map(voice => (
-                      <option key={voice.name} value={voice.name}>
-                        {voice.name}
-                      </option>
-                    ))}
-                  </optgroup>
-                )}
-                {otherVoices.length > 0 && (
-                  <optgroup label="لغات أخرى">
-                    {otherVoices.map(voice => (
-                      <option key={voice.name} value={voice.name}>
-                        {voice.name} ({voice.lang})
-                      </option>
-                    ))}
-                  </optgroup>
-                )}
-              </select>
+              <div className="grid grid-cols-3 gap-2">
+                {voices.map(voice => (
+                  <button
+                    key={voice.id}
+                    onClick={() => setSelectedVoice(voice.id)}
+                    className={`p-2 rounded-lg text-center transition-colors ${
+                      selectedVoice === voice.id
+                        ? 'bg-primary text-primary-foreground'
+                        : 'bg-background border border-border hover:bg-muted'
+                    }`}
+                  >
+                    <p className="text-sm font-medium">{voice.label}</p>
+                    <p className="text-xs opacity-70">{voice.description}</p>
+                  </button>
+                ))}
+              </div>
             </div>
 
             {/* Speed Control */}
             <div>
               <label className="text-sm text-muted-foreground mb-2 block">
-                السرعة: {rate.toFixed(1)}x
+                السرعة: {speed.toFixed(1)}x
               </label>
               <Slider
-                value={[rate]}
-                onValueChange={(v) => setRate(v[0])}
-                min={0.5}
-                max={2}
-                step={0.1}
-                className="w-full"
-              />
-            </div>
-
-            {/* Pitch Control */}
-            <div>
-              <label className="text-sm text-muted-foreground mb-2 block">
-                النبرة: {pitch.toFixed(1)}
-              </label>
-              <Slider
-                value={[pitch]}
-                onValueChange={(v) => setPitch(v[0])}
+                value={[speed]}
+                onValueChange={(v) => setSpeed(v[0])}
                 min={0.5}
                 max={2}
                 step={0.1}
@@ -281,7 +253,7 @@ export default function TextToSpeechPage() {
             </div>
             <h3 className="text-lg font-semibold text-foreground mb-2">حوّل النص إلى صوت</h3>
             <p className="text-sm text-muted-foreground max-w-xs">
-              اكتب أي نص في المربع أدناه وسيتم تحويله إلى صوت يمكنك الاستماع إليه
+              اكتب أي نص في المربع أدناه وسيتم تحويله إلى ملف صوتي MP3 يمكنك تحميله
             </p>
           </div>
         ) : (
@@ -303,7 +275,7 @@ export default function TextToSpeechPage() {
                         className="h-full bg-primary rounded-full"
                         initial={{ width: '0%' }}
                         animate={{ width: '100%' }}
-                        transition={{ duration: 0.5 }}
+                        transition={{ duration: 2 }}
                       />
                     </div>
                   </div>
@@ -355,9 +327,9 @@ export default function TextToSpeechPage() {
                   </div>
                   <div className="flex flex-col gap-2">
                     <button 
-                      onClick={() => downloadAsTextFile(audio)}
+                      onClick={() => downloadAudio(audio)}
                       className="p-2 hover:bg-muted rounded-lg transition-colors"
-                      title="تحميل"
+                      title="تحميل MP3"
                     >
                       <Download className="w-5 h-5 text-muted-foreground" />
                     </button>
@@ -385,6 +357,7 @@ export default function TextToSpeechPage() {
             placeholder="اكتب النص الذي تريد تحويله إلى صوت..."
             className="min-h-[80px] bg-muted border-border rounded-xl resize-none"
             dir="rtl"
+            disabled={loading}
           />
           <motion.button
             whileTap={{ scale: 0.98 }}
@@ -400,7 +373,7 @@ export default function TextToSpeechPage() {
             ) : (
               <>
                 <Volume2 className="w-5 h-5" />
-                <span>تحويل إلى صوت</span>
+                <span>تحويل إلى صوت MP3</span>
               </>
             )}
           </motion.button>
