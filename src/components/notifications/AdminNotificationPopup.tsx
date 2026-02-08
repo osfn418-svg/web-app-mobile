@@ -28,9 +28,9 @@ export function AdminNotificationPopup() {
     if (!user) return;
 
     try {
-      // Get all active notifications
+      // Get all active notifications from the secure public view (excludes created_by)
       const { data: allNotifications, error: notifError } = await supabase
-        .from('admin_notifications')
+        .from('public_notifications')
         .select('*')
         .eq('is_active', true)
         .or('expires_at.is.null,expires_at.gt.now()')
