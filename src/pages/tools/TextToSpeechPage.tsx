@@ -97,6 +97,16 @@ export default function TextToSpeechPage() {
         return;
       }
 
+      if (response.status === 403) {
+        toast.error('تم الوصول لحد الخدمة (403) — يلزم تحديث مفتاح الخدمة/زيادة الحصة');
+        return;
+      }
+
+      if (response.status === 401) {
+        toast.error('غير مصرح (401) — تحقق من إعدادات الخدمة');
+        return;
+      }
+
       if (!response.ok) {
         const errText = await response.text().catch(() => '');
         throw new Error(errText || 'Failed to generate speech');

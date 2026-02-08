@@ -169,7 +169,7 @@ serve(async (req) => {
     });
 
     if (!ttsResp.ok) {
-      const errorText = await ttsResp.text();
+      const errorText = await ttsResp.text().catch(() => "");
       console.error("AIML TTS error:", ttsResp.status, errorText);
 
       if (ttsResp.status === 429) {
@@ -186,10 +186,42 @@ serve(async (req) => {
         });
       }
 
-      return new Response(JSON.stringify({ error: "خطأ في تحويل النص إلى صوت" }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      if (ttsResp.status === 403) {
+        return new Response(
+          JSON.stringify({
+            error: "تم الوصول لحد استخدام المفتاح (403) — يرجى تحديث مفتاح الخدمة أو زيادة الحصة",
+            details: errorText.slice(0, 800),
+          }),
+          {
+            status: 403,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          }
+        );
+      }
+
+      if (ttsResp.status === 401) {
+        return new Response(
+          JSON.stringify({
+            error: "غير مصرح (401) — تحقق من صلاحية مفتاح الخدمة",
+            details: errorText.slice(0, 800),
+          }),
+          {
+            status: 401,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          }
+        );
+      }
+
+      return new Response(
+        JSON.stringify({
+          error: "خطأ في تحويل النص إلى صوت",
+          details: errorText.slice(0, 800),
+        }),
+        {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
     }
 
     const ttsJson = await ttsResp.json();
