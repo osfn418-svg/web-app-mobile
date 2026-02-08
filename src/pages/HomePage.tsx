@@ -43,38 +43,6 @@ export default function HomePage() {
           </div>
         </motion.div>
 
-        {/* AI Assistant - Featured Card */}
-        <motion.div
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ delay: 0.1 }}
-        >
-          <Link to="/chat/assistant">
-            <div className="glass-card rounded-2xl p-5 neon-border relative overflow-hidden group hover:scale-[1.02] transition-transform">
-              <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-br from-primary/20 to-secondary/20" />
-              <div className="relative z-10 flex items-center gap-4">
-                <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary to-secondary flex items-center justify-center text-3xl shadow-lg">
-                  🤖
-                </div>
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-1">
-                    <h3 className="text-xl font-bold text-foreground">الذكاء المساعد</h3>
-                    <span className="pro-badge text-xs">AI</span>
-                  </div>
-                  <p className="text-sm text-muted-foreground mb-2">
-                    تحدث مع الذكاء الاصطناعي واحصل على إجابات فورية
-                  </p>
-                  <div className="flex items-center gap-2 text-primary text-sm font-medium">
-                    <MessageCircle className="w-4 h-4" />
-                    <span>ابدأ المحادثة</span>
-                    <ChevronLeft className="w-4 h-4" />
-                  </div>
-                </div>
-              </div>
-            </div>
-          </Link>
-        </motion.div>
-
         {/* Pro Banner */}
         {!isPro && (
           <motion.div
@@ -113,7 +81,7 @@ export default function HomePage() {
           transition={{ delay: 0.2 }}
         >
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-foreground">أدوات أخرى</h2>
+            <h2 className="text-lg font-semibold text-foreground">الأدوات</h2>
             <Link to="/explore" className="text-sm text-primary">عرض الكل</Link>
           </div>
           
@@ -143,6 +111,38 @@ export default function HomePage() {
               </button>
             ))}
           </div>
+
+          {/* AI Assistant - Featured Card */}
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ delay: 0.1 }}
+            className="mb-4"
+          >
+            <Link to="/tools/assistant">
+              <div className="glass-card rounded-2xl p-4 neon-border relative overflow-hidden group hover:scale-[1.02] transition-transform">
+                <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-br from-primary/20 to-secondary/20" />
+                <div className="relative z-10 flex items-center gap-4">
+                  <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-primary to-secondary flex items-center justify-center text-2xl shadow-lg">
+                    🤖
+                  </div>
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-1">
+                      <h3 className="text-lg font-bold text-foreground">الذكاء المساعد</h3>
+                      <span className="pro-badge text-xs">AI</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      تحدث مع الذكاء الاصطناعي واحصل على إجابات فورية
+                    </p>
+                  </div>
+                  <div className="flex items-center text-primary">
+                    <MessageCircle className="w-5 h-5" />
+                    <ChevronLeft className="w-4 h-4" />
+                  </div>
+                </div>
+              </div>
+            </Link>
+          </motion.div>
 
           {/* Tools grid */}
           {toolsLoading ? (
