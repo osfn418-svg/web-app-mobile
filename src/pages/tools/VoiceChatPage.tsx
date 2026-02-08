@@ -463,37 +463,54 @@ export default function VoiceChatPage() {
               <p className="text-sm text-muted-foreground">{formatDuration(callDuration)}</p>
             </div>
 
-            {/* User transcript */}
-            <AnimatePresence mode="wait">
+            {/* Conversation Messages */}
+            <div className="w-full max-h-[300px] overflow-y-auto space-y-3 mb-6 px-2">
+              {messages.map((msg, idx) => (
+                <motion.div
+                  key={idx}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className={`rounded-xl p-3 ${
+                    msg.role === 'user' 
+                      ? 'bg-primary/20 mr-8' 
+                      : 'bg-muted/50 ml-8'
+                  }`}
+                >
+                  <p className="text-xs text-muted-foreground mb-1">
+                    {msg.role === 'user' ? '🎤 أنت:' : '🤖 المساعد:'}
+                  </p>
+                  <p className="text-sm text-foreground">{msg.content}</p>
+                </motion.div>
+              ))}
+              
+              {/* Live user transcript while speaking */}
               {userTranscript && (
                 <motion.div
-                  key="user-transcript"
                   initial={{ opacity: 0, y: 5 }}
                   animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -5 }}
-                  className="bg-primary/20 rounded-xl p-3 mb-3"
+                  className="bg-primary/30 rounded-xl p-3 mr-8 border-2 border-primary/50"
                 >
-                  <p className="text-xs text-muted-foreground mb-1">أنت:</p>
+                  <p className="text-xs text-muted-foreground mb-1">🎤 أنت تتحدث...</p>
                   <p className="text-sm text-foreground">{userTranscript}</p>
                 </motion.div>
               )}
-            </AnimatePresence>
-
-            {/* AI Transcript */}
-            <AnimatePresence mode="wait">
-              {transcript && (
+              
+              {/* Processing indicator */}
+              {isProcessing && (
                 <motion.div
-                  key="ai-transcript"
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -10 }}
-                  className="glass-card rounded-2xl p-4 mb-8 min-h-[80px]"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  className="bg-muted/50 rounded-xl p-3 ml-8"
                 >
-                  <p className="text-xs text-muted-foreground mb-1">المساعد:</p>
-                  <p className="text-sm text-foreground">{transcript}</p>
+                  <p className="text-xs text-muted-foreground mb-1">🤖 المساعد يفكر...</p>
+                  <div className="flex gap-1">
+                    <span className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                    <span className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                    <span className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                  </div>
                 </motion.div>
               )}
-            </AnimatePresence>
+            </div>
 
             {/* Controls */}
             <div className="flex items-center justify-center gap-6">
