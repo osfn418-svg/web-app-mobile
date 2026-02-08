@@ -24,11 +24,9 @@ interface GeneratedAudio {
   status: 'generating' | 'completed' | 'failed';
   /** data:audio/... when completed */
   audioUrl: string;
-  /** AIML CDN url while generating */
-  remoteAudioUrl?: string;
 }
 
-const TTS_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/text-to-speech-v2`;
+const TTS_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/text-to-speech`;
 
 export default function TextToSpeechPage() {
   const [text, setText] = useState('');
@@ -39,12 +37,9 @@ export default function TextToSpeechPage() {
   const [showSettings, setShowSettings] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [currentPlayingId, setCurrentPlayingId] = useState<string | null>(null);
-  const pollingRef = useRef<Record<string, number>>({});
 
   useEffect(() => {
     return () => {
-      Object.values(pollingRef.current).forEach((id) => window.clearInterval(id));
-      pollingRef.current = {};
       if (audioRef.current) audioRef.current.pause();
     };
   }, []);
@@ -57,74 +52,6 @@ export default function TextToSpeechPage() {
     { id: 'nova', label: 'Nova', description: 'أنثوي' },
     { id: 'shimmer', label: 'Shimmer', description: 'ناعم' },
   ];
-
-  const startPolling = (audioId: string, remoteAudioUrl: string) => {
-    // Clear previous polling for this item (if any)
-    const existing = pollingRef.current[audioId];
-    if (existing) window.clearInterval(existing);
-
-    const startedAt = Date.now();
-    const intervalId = window.setInterval(async () => {
-      // Stop polling after 4min to avoid infinite loops (AIML CDN قد يتأخر أكثر من 90ث)
-      if (Date.now() - startedAt > 240_000) {
-        window.clearInterval(intervalId);
-        delete pollingRef.current[audioId];
-        setAudios((prev) => prev.map((a) => (a.id === audioId ? { ...a, status: 'failed' } : a)));
-        toast.error('استغرق تجهيز الصوت وقتاً طويلاً، حاول مرة أخرى');
-        return;
-      }
-
-      try {
-        const resp = await fetch(TTS_URL, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-          },
-          body: JSON.stringify({ action: 'check', audioUrl: remoteAudioUrl }),
-        });
-
-        if (!resp.ok) return;
-
-        const data = await resp.json();
-        if (!data?.success) return;
-
-        if (data.status === 'completed' && data.audioData) {
-          const audioUrl = `data:audio/mpeg;base64,${data.audioData}`;
-
-          setAudios((prev) =>
-            prev.map((a) =>
-              a.id === audioId
-                ? {
-                    ...a,
-                    status: 'completed',
-                    audioUrl,
-                    remoteAudioUrl: undefined,
-                  }
-                : a
-            )
-          );
-
-          window.clearInterval(intervalId);
-          delete pollingRef.current[audioId];
-          toast.success('تم إنشاء الصوت بنجاح!');
-          return;
-        }
-
-        if (data.status === 'failed') {
-          window.clearInterval(intervalId);
-          delete pollingRef.current[audioId];
-          setAudios((prev) => prev.map((a) => (a.id === audioId ? { ...a, status: 'failed' } : a)));
-          toast.error(data.error || 'تعذر تحميل ملف الصوت');
-          return;
-        }
-      } catch {
-        // Silent retry; we'll keep polling.
-      }
-    }, 2000);
-
-    pollingRef.current[audioId] = intervalId;
-  };
 
   const generateSpeech = async () => {
     if (!text.trim() || loading) return;
@@ -139,10 +66,9 @@ export default function TextToSpeechPage() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
         },
         body: JSON.stringify({
-          action: 'generate',
           text: requestText,
           voice: selectedVoice,
           speed: speed,
@@ -154,70 +80,43 @@ export default function TextToSpeechPage() {
         return;
       }
 
+      if (response.status === 402) {
+        toast.error('يرجى إضافة رصيد ثم المحاولة مجدداً');
+        return;
+      }
+
       if (!response.ok) {
-        throw new Error('Failed to generate speech');
+        const errText = await response.text().catch(() => '');
+        throw new Error(errText || 'Failed to generate speech');
       }
 
       const data = await response.json();
 
-      if (!data.success) {
-        throw new Error(data.error || 'Failed to generate speech');
+      if (!data?.success || !data.audioData) {
+        throw new Error(data?.error || 'Invalid TTS response');
       }
 
       const voiceLabel = voices.find((v) => v.id === selectedVoice)?.label || selectedVoice;
+      const audioUrl = `data:audio/mpeg;base64,${data.audioData}`;
 
-      if (data.status === 'completed' && data.audioData) {
-        const audioUrl = `data:audio/mpeg;base64,${data.audioData}`;
+      const newAudio: GeneratedAudio = {
+        id: audioId,
+        text: requestText,
+        timestamp: new Date(),
+        isPlaying: false,
+        voice: voiceLabel,
+        status: 'completed',
+        audioUrl,
+      };
 
-        const newAudio: GeneratedAudio = {
-          id: audioId,
-          text: requestText,
-          timestamp: new Date(),
-          isPlaying: false,
-          voice: voiceLabel,
-          status: 'completed',
-          audioUrl,
-        };
-
-        setAudios((prev) => [newAudio, ...prev]);
-        setText('');
-        toast.success('تم إنشاء الصوت بنجاح!');
-        return;
-      }
-
-      if (data.status === 'pending' && data.audioUrl) {
-        const newAudio: GeneratedAudio = {
-          id: audioId,
-          text: requestText,
-          timestamp: new Date(),
-          isPlaying: false,
-          voice: voiceLabel,
-          status: 'generating',
-          audioUrl: '',
-          remoteAudioUrl: data.audioUrl,
-        };
-
-        setAudios((prev) => [newAudio, ...prev]);
-        setText('');
-        toast.message('جاري تجهيز الصوت...');
-
-        startPolling(audioId, data.audioUrl);
-        return;
-      }
-
-      if (data.status === 'failed') {
-        toast.error(data.error || 'تعذر تحميل ملف الصوت');
-        return;
-      }
-
-      throw new Error('Invalid TTS response');
+      setAudios((prev) => [newAudio, ...prev]);
+      setText('');
+      toast.success('تم إنشاء الصوت بنجاح!');
     } catch (error) {
       console.error('TTS error:', error);
       toast.error('حدث خطأ أثناء إنشاء الصوت');
 
-      setAudios((prev) =>
-        prev.map((a) => (a.id === audioId ? { ...a, status: 'failed' } : a))
-      );
+      setAudios((prev) => prev.map((a) => (a.id === audioId ? { ...a, status: 'failed' } : a)));
     } finally {
       setLoading(false);
     }
@@ -305,12 +204,6 @@ export default function TextToSpeechPage() {
   };
 
   const deleteAudio = (id: string) => {
-    const pollId = pollingRef.current[id];
-    if (pollId) {
-      window.clearInterval(pollId);
-      delete pollingRef.current[id];
-    }
-
     if (currentPlayingId === id && audioRef.current) {
       audioRef.current.pause();
       audioRef.current = null;
