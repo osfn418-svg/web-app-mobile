@@ -30,7 +30,7 @@ import PrivacyPolicyPage from "./pages/settings/PrivacyPolicyPage";
 // Tool Pages
 import ImageGeneratorPage from "./pages/tools/ImageGeneratorPage";
 import VideoGeneratorPage from "./pages/tools/VideoGeneratorPage";
-import AudioGeneratorPage from "./pages/tools/AudioGeneratorPage";
+import TextToSpeechPage from "./pages/tools/TextToSpeechPage";
 import CodeAssistantPage from "./pages/tools/CodeAssistantPage";
 import PromptMakerPage from "./pages/tools/PromptMakerPage";
 import DocumentAnalyzerPage from "./pages/tools/DocumentAnalyzerPage";
@@ -109,7 +109,7 @@ function AppRoutes() {
       <Route path="/tools/assistant" element={<ProtectedRoute><ChatPage /></ProtectedRoute>} />
       <Route path="/tools/images" element={<ProtectedRoute><ImageGeneratorPage /></ProtectedRoute>} />
       <Route path="/tools/video" element={<ProtectedRoute><VideoGeneratorPage /></ProtectedRoute>} />
-      <Route path="/tools/audio" element={<ProtectedRoute><AudioGeneratorPage /></ProtectedRoute>} />
+      <Route path="/tools/audio" element={<ProtectedRoute><TextToSpeechPage /></ProtectedRoute>} />
       <Route path="/tools/code" element={<ProtectedRoute><CodeAssistantPage /></ProtectedRoute>} />
       <Route path="/tools/prompt-maker" element={<ProtectedRoute><PromptMakerPage /></ProtectedRoute>} />
       <Route path="/tools/document" element={<ProtectedRoute><DocumentAnalyzerPage /></ProtectedRoute>} />
