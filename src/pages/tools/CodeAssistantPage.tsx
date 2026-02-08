@@ -11,6 +11,7 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { streamChat } from '@/lib/chatService';
 import { toast } from 'sonner';
+import { useChatPersistence } from '@/hooks/useChatPersistence';
 
 interface Message {
   id: string;
@@ -19,21 +20,23 @@ interface Message {
   isCode?: boolean;
 }
 
+// Tool ID for code assistant in database
+const CODE_TOOL_DB_ID = '0d101ac2-2b28-45f5-8564-c2ffd32000e1';
+
 export default function CodeAssistantPage() {
   const { profile, isPro } = useAuth();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
-  const [language, setLanguage] = useState('javascript');
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  
+  const { conversationId, createConversation, saveMessage, startNewChat } = useChatPersistence(CODE_TOOL_DB_ID);
+  const conversationIdRef = useRef<string | null>(null);
 
-  const languages = [
-    { id: 'javascript', label: 'JavaScript', emoji: '🟨' },
-    { id: 'python', label: 'Python', emoji: '🐍' },
-    { id: 'typescript', label: 'TypeScript', emoji: '🔷' },
-    { id: 'html', label: 'HTML/CSS', emoji: '🌐' },
-  ];
+  useEffect(() => {
+    conversationIdRef.current = conversationId;
+  }, [conversationId]);
 
   useEffect(() => {
     setMessages([{
@@ -53,12 +56,23 @@ export default function CodeAssistantPage() {
     const userMessage: Message = {
       id: Date.now().toString(),
       role: 'user',
-      content: `[لغة البرمجة: ${language}]\n${input}`,
+      content: input,
     };
 
     setMessages(prev => [...prev, userMessage]);
+    const currentInput = input;
     setInput('');
     setLoading(true);
+
+    // Persist conversation & message
+    let currentConvId = conversationIdRef.current;
+    if (!currentConvId) {
+      currentConvId = await createConversation(currentInput);
+      if (currentConvId) conversationIdRef.current = currentConvId;
+    }
+    if (currentConvId) {
+      void saveMessage(currentConvId, 'user', currentInput);
+    }
 
     let assistantContent = '';
 
@@ -88,6 +102,10 @@ export default function CodeAssistantPage() {
             prev.map(m => m.id === 'streaming' ? { ...m, id: Date.now().toString() } : m)
           );
           setLoading(false);
+          // Persist assistant response
+          if (currentConvId && assistantContent) {
+            void saveMessage(currentConvId, 'assistant', assistantContent);
+          }
         },
         onError: (error) => {
           toast.error(error);
@@ -150,24 +168,6 @@ export default function CodeAssistantPage() {
             </div>
           </div>
           <span className="pro-badge">PRO</span>
-        </div>
-        
-        {/* Language Selector */}
-        <div className="flex gap-2 mt-3 overflow-x-auto pb-2 scrollbar-hide">
-          {languages.map((lang) => (
-            <button
-              key={lang.id}
-              onClick={() => setLanguage(lang.id)}
-              className={`px-3 py-1.5 rounded-lg text-xs whitespace-nowrap transition-colors flex items-center gap-1 ${
-                language === lang.id
-                  ? 'bg-primary text-primary-foreground'
-                  : 'bg-muted text-muted-foreground'
-              }`}
-            >
-              <span>{lang.emoji}</span>
-              <span>{lang.label}</span>
-            </button>
-          ))}
         </div>
       </header>
 
