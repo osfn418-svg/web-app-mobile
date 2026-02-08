@@ -79,7 +79,8 @@ export default function TextToSpeechPage() {
         throw new Error(data.error || 'Failed to generate speech');
       }
 
-      const audioUrl = data.audioUrl;
+      // Create audio URL from base64 data
+      const audioUrl = `data:audio/mpeg;base64,${data.audioData}`;
       
       const newAudio: GeneratedAudio = {
         id: Date.now().toString(),
