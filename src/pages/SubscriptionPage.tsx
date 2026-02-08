@@ -1,11 +1,10 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Check, ChevronRight, CreditCard, Sparkles, Zap, Crown } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Check, ChevronRight, CreditCard, Sparkles, Zap, Crown, Wallet } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
 import MobileLayout from '@/components/layout/MobileLayout';
 import NeonButton from '@/components/ui/NeonButton';
 import { useAuth } from '@/contexts/AuthContext';
-import { toast } from 'sonner';
 
 const plans = [
   {
@@ -54,17 +53,23 @@ const plans = [
 ];
 
 export default function SubscriptionPage() {
+  const navigate = useNavigate();
   const { isPro } = useAuth();
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
   const [selectedPlan, setSelectedPlan] = useState('pro');
-  const [loading, setLoading] = useState(false);
 
-  const handleSubscribe = async () => {
-    setLoading(true);
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    toast.success('تم الاشتراك بنجاح! 🎉');
-    setLoading(false);
+  const getPrice = (planId: string) => {
+    const plan = plans.find(p => p.id === planId);
+    if (!plan) return 0;
+    return billingCycle === 'yearly' 
+      ? Math.round(plan.price * 0.8 * 12) 
+      : plan.price;
+  };
+
+  const handleSubscribe = () => {
+    if (selectedPlan === 'free') return;
+    const price = getPrice(selectedPlan);
+    navigate(`/payment?plan=${selectedPlan}&amount=${price}`);
   };
 
   return (
@@ -202,23 +207,28 @@ export default function SubscriptionPage() {
           ))}
         </div>
 
-        {/* Payment Methods */}
+        {/* Payment Methods Preview */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.5 }}
+          onClick={() => selectedPlan !== 'free' && handleSubscribe()}
+          className={`glass-card rounded-2xl p-4 ${selectedPlan !== 'free' ? 'cursor-pointer hover:border-primary/50 transition-all' : 'opacity-50'}`}
         >
-          <h3 className="text-sm font-medium text-muted-foreground mb-3">طريقة الدفع</h3>
-          <div className="glass-card rounded-2xl p-4 flex items-center gap-4">
+          <h3 className="text-sm font-medium text-muted-foreground mb-3">طرق الدفع المتاحة</h3>
+          <div className="flex items-center gap-4">
             <div className="flex gap-2">
-              <div className="w-12 h-8 bg-muted rounded flex items-center justify-center">
-                <CreditCard className="w-5 h-5 text-muted-foreground" />
+              <div className="w-12 h-8 bg-gradient-to-br from-orange-500 to-yellow-500 rounded flex items-center justify-center">
+                <Wallet className="w-5 h-5 text-white" />
               </div>
-              <div className="w-12 h-8 bg-muted rounded flex items-center justify-center text-xs font-bold text-muted-foreground">
-                PayPal
+              <div className="w-12 h-8 bg-gradient-to-br from-blue-500 to-cyan-500 rounded flex items-center justify-center">
+                <CreditCard className="w-5 h-5 text-white" />
               </div>
             </div>
-            <ChevronRight className="w-5 h-5 text-muted-foreground mr-auto rotate-180" />
+            <div className="flex-1">
+              <p className="text-sm text-foreground">عملات مشفرة • بطاقات بنكية</p>
+            </div>
+            <ChevronRight className="w-5 h-5 text-muted-foreground rotate-180" />
           </div>
         </motion.div>
 
@@ -232,15 +242,10 @@ export default function SubscriptionPage() {
             variant={selectedPlan === 'pro' ? 'pro' : 'primary'}
             className="w-full"
             onClick={handleSubscribe}
-            loading={loading}
             disabled={selectedPlan === 'free'}
           >
             <Zap className="w-5 h-5 ml-2" />
-            {selectedPlan === 'free' ? 'الخطة الحالية' : `اشترك الآن - $${
-              billingCycle === 'yearly' 
-                ? ((plans.find(p => p.id === selectedPlan)?.price || 0) * 0.8 * 12).toFixed(0)
-                : plans.find(p => p.id === selectedPlan)?.price
-            }`}
+            {selectedPlan === 'free' ? 'الخطة الحالية' : `اشترك الآن - $${getPrice(selectedPlan)}`}
           </NeonButton>
         </motion.div>
 
