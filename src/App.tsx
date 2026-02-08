@@ -35,6 +35,7 @@ import CodeAssistantPage from "./pages/tools/CodeAssistantPage";
 import PromptMakerPage from "./pages/tools/PromptMakerPage";
 import DocumentAnalyzerPage from "./pages/tools/DocumentAnalyzerPage";
 import VoiceChatPage from "./pages/tools/VoiceChatPage";
+import SpeechToTextPage from "./pages/tools/SpeechToTextPage";
 
 // Notifications
 import { AdminNotificationPopup } from "./components/notifications/AdminNotificationPopup";
@@ -114,6 +115,7 @@ function AppRoutes() {
       <Route path="/tools/prompt-maker" element={<ProtectedRoute><PromptMakerPage /></ProtectedRoute>} />
       <Route path="/tools/document" element={<ProtectedRoute><DocumentAnalyzerPage /></ProtectedRoute>} />
       <Route path="/tools/voice-chat" element={<ProtectedRoute><VoiceChatPage /></ProtectedRoute>} />
+      <Route path="/tools/speech-to-text" element={<ProtectedRoute><SpeechToTextPage /></ProtectedRoute>} />
       <Route path="/tools/:toolId" element={<ProtectedRoute><ChatPage /></ProtectedRoute>} />
 
       {/* Settings Routes */}

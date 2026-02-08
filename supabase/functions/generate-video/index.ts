@@ -20,7 +20,9 @@ serve(async (req) => {
 
     // Check video generation status
     if (action === "check") {
-      const response = await fetch(`https://api.aimlapi.com/v2/video/generations?generation_id=${generationId}`, {
+      console.log("Checking video status for:", generationId);
+      
+      const response = await fetch(`https://api.aimlapi.com/v2/generate/video/kling/generation?generation_id=${generationId}`, {
         method: "GET",
         headers: {
           Authorization: `Bearer ${AIML_API_KEY}`,
@@ -28,7 +30,29 @@ serve(async (req) => {
       });
 
       const data = await response.json();
-      return new Response(JSON.stringify(data), {
+      console.log("Video status response:", JSON.stringify(data));
+      
+      // Parse AIML response format
+      let status = data.status || "queued";
+      let videoUrl = null;
+      
+      // Check if video is ready
+      if (data.video?.url) {
+        videoUrl = data.video.url;
+        status = "completed";
+      } else if (data.videos && data.videos.length > 0 && data.videos[0].url) {
+        videoUrl = data.videos[0].url;
+        status = "completed";
+      } else if (status === "completed" && !videoUrl) {
+        // API says completed but no URL - check nested structures
+        videoUrl = data.output?.url || data.result?.url || null;
+      }
+      
+      return new Response(JSON.stringify({
+        id: generationId,
+        status: status,
+        video_url: videoUrl,
+      }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }

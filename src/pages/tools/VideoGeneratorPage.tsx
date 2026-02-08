@@ -43,7 +43,18 @@ export default function VideoGeneratorPage() {
     };
   }, []);
 
-  const checkVideoStatus = async (generationId: string, videoId: string) => {
+  const checkVideoStatus = async (generationId: string, videoId: string, startTime: number) => {
+    // Timeout after 5 minutes
+    if (Date.now() - startTime > 5 * 60 * 1000) {
+      setVideos(prev => prev.map(v => 
+        v.id === videoId 
+          ? { ...v, status: 'failed' }
+          : v
+      ));
+      toast.error('استغرق التوليد وقتاً طويلاً، حاول مجدداً');
+      return true;
+    }
+
     try {
       const response = await fetch(VIDEO_URL, {
         method: 'POST',
@@ -58,6 +69,7 @@ export default function VideoGeneratorPage() {
       });
 
       const data = await response.json();
+      console.log('Video status:', data);
       
       if (data.status === 'completed' && data.video_url) {
         setVideos(prev => prev.map(v => 
@@ -65,18 +77,19 @@ export default function VideoGeneratorPage() {
             ? { ...v, status: 'completed', videoUrl: data.video_url, thumbnail: data.video_url }
             : v
         ));
-        return true; // Stop polling
-      } else if (data.status === 'failed') {
+        toast.success('تم توليد الفيديو بنجاح!');
+        return true;
+      } else if (data.status === 'failed' || data.status === 'error') {
         setVideos(prev => prev.map(v => 
           v.id === videoId 
             ? { ...v, status: 'failed' }
             : v
         ));
         toast.error('فشل في توليد الفيديو');
-        return true; // Stop polling
+        return true;
       }
       
-      return false; // Continue polling
+      return false;
     } catch (error) {
       console.error('Status check error:', error);
       return false;
@@ -131,13 +144,14 @@ export default function VideoGeneratorPage() {
       setPrompt('');
       toast.success('بدأ توليد الفيديو! سيتم إكماله قريباً...');
 
-      // Start polling for status
+      // Start polling for status with start time for timeout
+      const startTime = Date.now();
       const pollInterval = setInterval(async () => {
-        const isDone = await checkVideoStatus(data.generationId, newVideo.id);
+        const isDone = await checkVideoStatus(data.generationId, newVideo.id, startTime);
         if (isDone) {
           clearInterval(pollInterval);
         }
-      }, 10000); // Check every 10 seconds
+      }, 8000); // Check every 8 seconds
 
       pollingRef.current = pollInterval;
 
