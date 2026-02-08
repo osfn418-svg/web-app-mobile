@@ -1,10 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
-};
+import { validateAuth, unauthorizedResponse, corsHeaders } from "../_shared/auth.ts";
 
 function pickAudioUrl(raw: any): string | null {
   return (
@@ -40,6 +35,12 @@ async function readJsonOrText(resp: Response): Promise<{ json: any; rawText: str
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
+  // Validate authentication
+  const { user, error: authError } = await validateAuth(req);
+  if (authError || !user) {
+    return unauthorizedResponse(authError || "غير مصرح");
+  }
+
   try {
     const { prompt, genre, duration, action, generationId } = await req.json();
     const AIML_API_KEY = Deno.env.get("AIML_API_KEY");
@@ -54,6 +55,8 @@ serve(async (req) => {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
+
+      console.log("Checking music status for user:", user.id, "generationId:", generationId);
 
       const resp = await fetch(
         `https://api.aimlapi.com/v2/generate/audio?generation_id=${encodeURIComponent(generationId)}`,
@@ -129,6 +132,8 @@ serve(async (req) => {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+
+    console.log("Starting music generation for user:", user.id, "prompt:", prompt);
 
     const genreStyles: Record<string, string> = {
       ambient: "ambient, atmospheric, relaxing, peaceful",

@@ -1,16 +1,17 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
-};
+import { validateAuth, unauthorizedResponse, corsHeaders } from "../_shared/auth.ts";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
+  }
+
+  // Validate authentication
+  const { user, error: authError } = await validateAuth(req);
+  if (authError || !user) {
+    return unauthorizedResponse(authError || "غير مصرح");
   }
 
   try {
@@ -27,7 +28,7 @@ serve(async (req) => {
       const body = await req.json();
       
       if (body.action === "check" && body.generationId) {
-        console.log("Checking STT status for:", body.generationId);
+        console.log("Checking STT status for user:", user.id, "generationId:", body.generationId);
         
         const response = await fetch(`https://api.aimlapi.com/v1/stt/${body.generationId}`, {
           method: "GET",
@@ -85,7 +86,7 @@ serve(async (req) => {
       });
     }
 
-    console.log("Transcribing audio file:", audioFile.name, audioFile.size, "bytes");
+    console.log("Transcribing audio for user:", user.id, "file:", audioFile.name, audioFile.size, "bytes");
 
     // Step 1: Upload file and get a URL (we'll use base64 data URL approach)
     // First, let's try with the file directly
