@@ -1,7 +1,8 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import NeonButton from '@/components/ui/NeonButton';
-import { Sparkles, Zap, Brain, Wand2 } from 'lucide-react';
+import { Sparkles, Brain, Wand2 } from 'lucide-react';
+import logoImg from '@/assets/logo.png';
 
 export default function WelcomePage() {
   const navigate = useNavigate();
@@ -31,9 +32,9 @@ export default function WelcomePage() {
           initial={{ scale: 0 }}
           animate={{ scale: 1 }}
           transition={{ delay: 0.2, type: 'spring', stiffness: 200 }}
-          className="w-24 h-24 mx-auto mb-8 rounded-3xl bg-gradient-to-br from-primary via-secondary to-primary flex items-center justify-center animate-glow"
+          className="w-28 h-28 mx-auto mb-8"
         >
-          <Zap className="w-12 h-12 text-primary-foreground" />
+          <img src={logoImg} alt="Nexus AI Hub Logo" className="w-full h-full object-contain" />
         </motion.div>
 
         {/* Title */}
