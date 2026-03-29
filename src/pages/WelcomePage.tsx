@@ -32,7 +32,7 @@ export default function WelcomePage() {
           initial={{ scale: 0 }}
           animate={{ scale: 1 }}
           transition={{ delay: 0.2, type: 'spring', stiffness: 200 }}
-          className="w-28 h-28 mx-auto mb-8"
+          className="w-40 h-40 mx-auto mb-6"
         >
           <img src={logoImg} alt="Nexus AI Hub Logo" className="w-full h-full object-contain" />
         </motion.div>
