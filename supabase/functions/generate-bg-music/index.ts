@@ -1,5 +1,4 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { encode as base64Encode } from "https://deno.land/std@0.168.0/encoding/base64.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -7,42 +6,40 @@ const corsHeaders = {
 };
 
 serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
+  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
     const { prompt, duration } = await req.json();
-    const ELEVENLABS_API_KEY = Deno.env.get("ELEVENLABS_API_KEY");
-    
-    if (!ELEVENLABS_API_KEY) {
-      throw new Error("ELEVENLABS_API_KEY not configured");
-    }
+    const AIML_API_KEY = Deno.env.get("AIML_API_KEY");
+    if (!AIML_API_KEY) throw new Error("AIML_API_KEY not configured");
 
-    const response = await fetch("https://api.elevenlabs.io/v1/music", {
+    // Start generation
+    const startRes = await fetch("https://api.aimlapi.com/v2/generate/audio", {
       method: "POST",
       headers: {
-        "xi-api-key": ELEVENLABS_API_KEY,
+        Authorization: `Bearer ${AIML_API_KEY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
+        model: "minimax/music-01",
         prompt: prompt || "Calm ambient electronic music",
-        duration_seconds: duration || 60,
+        duration: duration || 60,
       }),
     });
 
-    if (!response.ok) {
-      const err = await response.text();
-      throw new Error(`ElevenLabs error: ${response.status} ${err}`);
+    const rawText = await startRes.text();
+    console.log("Start response:", startRes.status, rawText);
+
+    if (!startRes.ok) {
+      return new Response(JSON.stringify({ error: "Generation failed", details: rawText.slice(0, 500) }), {
+        status: startRes.status,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
-    const audioBuffer = await response.arrayBuffer();
-
-    return new Response(audioBuffer, {
-      headers: {
-        ...corsHeaders,
-        "Content-Type": "audio/mpeg",
-      },
+    const data = JSON.parse(rawText);
+    return new Response(JSON.stringify(data), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {
     return new Response(JSON.stringify({ error: e.message }), {
