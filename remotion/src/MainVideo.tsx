@@ -2,6 +2,7 @@ import { AbsoluteFill } from "remotion";
 import { TransitionSeries, springTiming } from "@remotion/transitions";
 import { fade } from "@remotion/transitions/fade";
 import { wipe } from "@remotion/transitions/wipe";
+import { Scene0Credits } from "./scenes/Scene0Credits";
 import { Scene1Intro } from "./scenes/Scene1Intro";
 import { Scene2Features } from "./scenes/Scene2Features";
 import { Scene3Tools } from "./scenes/Scene3Tools";
@@ -14,6 +15,13 @@ export const MainVideo = () => {
     <AbsoluteFill>
       <PersistentBackground />
       <TransitionSeries>
+        <TransitionSeries.Sequence durationInFrames={180}>
+          <Scene0Credits />
+        </TransitionSeries.Sequence>
+        <TransitionSeries.Transition
+          presentation={fade()}
+          timing={springTiming({ config: { damping: 200 }, durationInFrames: 25 })}
+        />
         <TransitionSeries.Sequence durationInFrames={140}>
           <Scene1Intro />
         </TransitionSeries.Sequence>

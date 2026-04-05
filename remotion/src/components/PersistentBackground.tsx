@@ -3,8 +3,8 @@ import { AbsoluteFill, useCurrentFrame, interpolate } from "remotion";
 export const PersistentBackground = () => {
   const frame = useCurrentFrame();
 
-  const hueShift = interpolate(frame, [0, 600], [0, 30]);
-  const gradientAngle = interpolate(frame, [0, 600], [135, 225]);
+  const hueShift = interpolate(frame, [0, 735], [0, 30]);
+  const gradientAngle = interpolate(frame, [0, 735], [135, 225]);
 
   return (
     <AbsoluteFill>
@@ -22,7 +22,7 @@ export const PersistentBackground = () => {
       {[0, 1, 2].map((i) => {
         const x = interpolate(
           frame,
-          [0, 600],
+          [0, 735],
           [200 + i * 500, 400 + i * 400],
         );
         const y = interpolate(
