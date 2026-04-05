@@ -9,11 +9,10 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const { prompt, duration } = await req.json();
+    const { prompt } = await req.json();
     const AIML_API_KEY = Deno.env.get("AIML_API_KEY");
     if (!AIML_API_KEY) throw new Error("AIML_API_KEY not configured");
 
-    // Start generation
     const startRes = await fetch("https://api.aimlapi.com/v2/generate/audio", {
       method: "POST",
       headers: {
@@ -21,24 +20,16 @@ serve(async (req) => {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "minimax/music-01",
+        model: "minimax-music",
         prompt: prompt || "Calm ambient electronic music",
-        duration: duration || 60,
       }),
     });
 
     const rawText = await startRes.text();
-    console.log("Start response:", startRes.status, rawText);
+    console.log("Response:", startRes.status, rawText.slice(0, 500));
 
-    if (!startRes.ok) {
-      return new Response(JSON.stringify({ error: "Generation failed", details: rawText.slice(0, 500) }), {
-        status: startRes.status,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const data = JSON.parse(rawText);
-    return new Response(JSON.stringify(data), {
+    return new Response(rawText, {
+      status: startRes.status,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {
