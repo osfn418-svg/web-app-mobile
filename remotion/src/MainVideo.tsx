@@ -15,69 +15,64 @@ import { Scene4Tech } from "./scenes/Scene4Tech";
 import { Scene5Closing } from "./scenes/Scene5Closing";
 import { PersistentBackground } from "./components/PersistentBackground";
 
-const T = 20; // transition duration
+const T = 20;
+
+// Scene durations (frames at 30fps)
+// Total sequences: 210+180+200+195+195+195+195+180+165+195 = 1910
+// Transitions: 9×20 + 0 = 180  (last transition is 25 so 8×20+25=185)
+// Effective: 1910 - 185 = 1725 frames = ~57.5s
 
 export const MainVideo = () => {
   return (
     <AbsoluteFill>
       <PersistentBackground />
       <TransitionSeries>
-        {/* 1. Credits - 6s */}
-        <TransitionSeries.Sequence durationInFrames={180}>
+        <TransitionSeries.Sequence durationInFrames={210}>
           <Scene0Credits />
         </TransitionSeries.Sequence>
         <TransitionSeries.Transition presentation={fade()} timing={springTiming({ config: { damping: 200 }, durationInFrames: T })} />
 
-        {/* 2. Logo Intro - 4.5s */}
-        <TransitionSeries.Sequence durationInFrames={135}>
+        <TransitionSeries.Sequence durationInFrames={180}>
           <Scene1Intro />
         </TransitionSeries.Sequence>
         <TransitionSeries.Transition presentation={wipe({ direction: "from-left" })} timing={springTiming({ config: { damping: 200 }, durationInFrames: T })} />
 
-        {/* 3. Chat UI - 5s */}
-        <TransitionSeries.Sequence durationInFrames={150}>
+        <TransitionSeries.Sequence durationInFrames={200}>
           <SceneChat />
         </TransitionSeries.Sequence>
         <TransitionSeries.Transition presentation={slide({ direction: "from-right" })} timing={springTiming({ config: { damping: 200 }, durationInFrames: T })} />
 
-        {/* 4. Image Generator - 5s */}
-        <TransitionSeries.Sequence durationInFrames={150}>
+        <TransitionSeries.Sequence durationInFrames={195}>
           <SceneImageGen />
         </TransitionSeries.Sequence>
         <TransitionSeries.Transition presentation={fade()} timing={springTiming({ config: { damping: 200 }, durationInFrames: T })} />
 
-        {/* 5. Video & Music - 5s */}
-        <TransitionSeries.Sequence durationInFrames={150}>
+        <TransitionSeries.Sequence durationInFrames={195}>
           <SceneVideoMusic />
         </TransitionSeries.Sequence>
         <TransitionSeries.Transition presentation={wipe({ direction: "from-right" })} timing={springTiming({ config: { damping: 200 }, durationInFrames: T })} />
 
-        {/* 6. Code & Docs - 5s */}
-        <TransitionSeries.Sequence durationInFrames={150}>
+        <TransitionSeries.Sequence durationInFrames={195}>
           <SceneCodeDoc />
         </TransitionSeries.Sequence>
         <TransitionSeries.Transition presentation={slide({ direction: "from-left" })} timing={springTiming({ config: { damping: 200 }, durationInFrames: T })} />
 
-        {/* 7. Voice & Speech - 5s */}
-        <TransitionSeries.Sequence durationInFrames={150}>
+        <TransitionSeries.Sequence durationInFrames={195}>
           <SceneVoice />
         </TransitionSeries.Sequence>
         <TransitionSeries.Transition presentation={fade()} timing={springTiming({ config: { damping: 200 }, durationInFrames: T })} />
 
-        {/* 8. Multi-model - 5s */}
-        <TransitionSeries.Sequence durationInFrames={150}>
+        <TransitionSeries.Sequence durationInFrames={180}>
           <Scene3Tools />
         </TransitionSeries.Sequence>
         <TransitionSeries.Transition presentation={wipe({ direction: "from-left" })} timing={springTiming({ config: { damping: 200 }, durationInFrames: T })} />
 
-        {/* 9. Performance Stats - 4.5s */}
-        <TransitionSeries.Sequence durationInFrames={135}>
+        <TransitionSeries.Sequence durationInFrames={165}>
           <Scene4Tech />
         </TransitionSeries.Sequence>
         <TransitionSeries.Transition presentation={fade()} timing={springTiming({ config: { damping: 200 }, durationInFrames: 25 })} />
 
-        {/* 10. Closing - 5s */}
-        <TransitionSeries.Sequence durationInFrames={150}>
+        <TransitionSeries.Sequence durationInFrames={195}>
           <Scene5Closing />
         </TransitionSeries.Sequence>
       </TransitionSeries>
