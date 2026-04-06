@@ -17,10 +17,9 @@ import { PersistentBackground } from "./components/PersistentBackground";
 
 const T = 20;
 
-// Scene durations (frames at 30fps)
-// Total sequences: 210+180+200+195+195+195+195+180+165+195 = 1910
-// Transitions: 9×20 + 0 = 180  (last transition is 25 so 8×20+25=185)
-// Effective: 1910 - 185 = 1725 frames = ~57.5s
+// 10 scenes: 210+170+190+185+185+185+185+170+160+185 = 1825
+// 9 transitions: 8×20 + 25 = 185
+// Effective: 1825 - 185 = 1640 ≈ 1650 frames (~55s)
 
 export const MainVideo = () => {
   return (
@@ -32,47 +31,47 @@ export const MainVideo = () => {
         </TransitionSeries.Sequence>
         <TransitionSeries.Transition presentation={fade()} timing={springTiming({ config: { damping: 200 }, durationInFrames: T })} />
 
-        <TransitionSeries.Sequence durationInFrames={180}>
+        <TransitionSeries.Sequence durationInFrames={170}>
           <Scene1Intro />
         </TransitionSeries.Sequence>
         <TransitionSeries.Transition presentation={wipe({ direction: "from-left" })} timing={springTiming({ config: { damping: 200 }, durationInFrames: T })} />
 
-        <TransitionSeries.Sequence durationInFrames={200}>
+        <TransitionSeries.Sequence durationInFrames={190}>
           <SceneChat />
         </TransitionSeries.Sequence>
         <TransitionSeries.Transition presentation={slide({ direction: "from-right" })} timing={springTiming({ config: { damping: 200 }, durationInFrames: T })} />
 
-        <TransitionSeries.Sequence durationInFrames={195}>
+        <TransitionSeries.Sequence durationInFrames={185}>
           <SceneImageGen />
         </TransitionSeries.Sequence>
         <TransitionSeries.Transition presentation={fade()} timing={springTiming({ config: { damping: 200 }, durationInFrames: T })} />
 
-        <TransitionSeries.Sequence durationInFrames={195}>
+        <TransitionSeries.Sequence durationInFrames={185}>
           <SceneVideoMusic />
         </TransitionSeries.Sequence>
         <TransitionSeries.Transition presentation={wipe({ direction: "from-right" })} timing={springTiming({ config: { damping: 200 }, durationInFrames: T })} />
 
-        <TransitionSeries.Sequence durationInFrames={195}>
+        <TransitionSeries.Sequence durationInFrames={185}>
           <SceneCodeDoc />
         </TransitionSeries.Sequence>
         <TransitionSeries.Transition presentation={slide({ direction: "from-left" })} timing={springTiming({ config: { damping: 200 }, durationInFrames: T })} />
 
-        <TransitionSeries.Sequence durationInFrames={195}>
+        <TransitionSeries.Sequence durationInFrames={185}>
           <SceneVoice />
         </TransitionSeries.Sequence>
         <TransitionSeries.Transition presentation={fade()} timing={springTiming({ config: { damping: 200 }, durationInFrames: T })} />
 
-        <TransitionSeries.Sequence durationInFrames={180}>
+        <TransitionSeries.Sequence durationInFrames={170}>
           <Scene3Tools />
         </TransitionSeries.Sequence>
         <TransitionSeries.Transition presentation={wipe({ direction: "from-left" })} timing={springTiming({ config: { damping: 200 }, durationInFrames: T })} />
 
-        <TransitionSeries.Sequence durationInFrames={165}>
+        <TransitionSeries.Sequence durationInFrames={160}>
           <Scene4Tech />
         </TransitionSeries.Sequence>
         <TransitionSeries.Transition presentation={fade()} timing={springTiming({ config: { damping: 200 }, durationInFrames: 25 })} />
 
-        <TransitionSeries.Sequence durationInFrames={195}>
+        <TransitionSeries.Sequence durationInFrames={185}>
           <Scene5Closing />
         </TransitionSeries.Sequence>
       </TransitionSeries>
