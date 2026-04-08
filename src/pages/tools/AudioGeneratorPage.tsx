@@ -16,6 +16,7 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { useActivityLogger } from '@/hooks/useActivityLogger';
+import { useAuthToken } from '@/hooks/useAuthToken';
 
 interface GeneratedAudio {
   id: string;
@@ -43,6 +44,7 @@ export default function AudioGeneratorPage() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const pollingRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
   const { logActivity } = useActivityLogger();
+  const { getToken } = useAuthToken();
 
   const genres = [
     { id: 'ambient', label: 'أمبينت', emoji: '🌊' },
@@ -84,11 +86,12 @@ export default function AudioGeneratorPage() {
     }
 
     try {
+      const token = await getToken();
       const response = await fetch(MUSIC_URL, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+          'Authorization': `Bearer ${token}`,
         },
         body: JSON.stringify({
           action: 'check',
@@ -158,11 +161,17 @@ export default function AudioGeneratorPage() {
     setLoading(true);
 
     try {
+      const token = await getToken();
+      if (!token) {
+        toast.error('يرجى تسجيل الدخول أولاً');
+        setLoading(false);
+        return;
+      }
       const response = await fetch(MUSIC_URL, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+          'Authorization': `Bearer ${token}`,
         },
         body: JSON.stringify({
           prompt,

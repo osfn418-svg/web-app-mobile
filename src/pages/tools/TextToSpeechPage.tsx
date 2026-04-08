@@ -16,6 +16,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Slider } from '@/components/ui/slider';
 import { useTtsPolling } from '@/hooks/useTtsPolling';
 import { useActivityLogger } from '@/hooks/useActivityLogger';
+import { useAuthToken } from '@/hooks/useAuthToken';
 
 interface GeneratedAudio {
   id: string;
@@ -43,10 +44,16 @@ export default function TextToSpeechPage() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [currentPlayingId, setCurrentPlayingId] = useState<string | null>(null);
   const { logActivity } = useActivityLogger();
+  const { getToken } = useAuthToken();
+  const [authToken, setAuthToken] = useState<string>('');
+
+  useEffect(() => {
+    getToken().then(t => { if (t) setAuthToken(t); });
+  }, [getToken]);
 
   const poller = useTtsPolling({
     ttsUrl: TTS_URL,
-    authToken: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+    authToken,
     intervalMs: 4000,
     timeoutMs: 4 * 60 * 1000,
   });
@@ -76,11 +83,18 @@ export default function TextToSpeechPage() {
     setLoading(true);
 
     try {
+      const token = await getToken();
+      if (!token) {
+        toast.error('يرجى تسجيل الدخول أولاً');
+        setLoading(false);
+        return;
+      }
+      setAuthToken(token);
       const response = await fetch(TTS_URL, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
           action: 'generate',

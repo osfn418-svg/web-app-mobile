@@ -17,6 +17,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { Progress } from '@/components/ui/progress';
 import { useActivityLogger } from '@/hooks/useActivityLogger';
+import { useAuthToken } from '@/hooks/useAuthToken';
 
 interface GeneratedVideo {
   id: string;
@@ -45,6 +46,7 @@ export default function VideoGeneratorPage() {
   const pollingRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
   const progressRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
   const { logActivity } = useActivityLogger();
+  const { getToken } = useAuthToken();
 
   // Cleanup polling on unmount
   useEffect(() => {
@@ -81,11 +83,12 @@ export default function VideoGeneratorPage() {
     }
 
     try {
+      const token = await getToken();
       const response = await fetch(VIDEO_URL, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+          'Authorization': `Bearer ${token}`,
         },
         body: JSON.stringify({ 
           action: 'check',
@@ -159,11 +162,17 @@ export default function VideoGeneratorPage() {
     setLoading(true);
     
     try {
+      const token = await getToken();
+      if (!token) {
+        toast.error('يرجى تسجيل الدخول أولاً');
+        setLoading(false);
+        return;
+      }
       const response = await fetch(VIDEO_URL, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+          'Authorization': `Bearer ${token}`,
         },
         body: JSON.stringify({ 
           prompt,
