@@ -44,10 +44,16 @@ export default function TextToSpeechPage() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [currentPlayingId, setCurrentPlayingId] = useState<string | null>(null);
   const { logActivity } = useActivityLogger();
+  const { getToken } = useAuthToken();
+  const [authToken, setAuthToken] = useState<string>('');
+
+  useEffect(() => {
+    getToken().then(t => { if (t) setAuthToken(t); });
+  }, [getToken]);
 
   const poller = useTtsPolling({
     ttsUrl: TTS_URL,
-    authToken: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+    authToken,
     intervalMs: 4000,
     timeoutMs: 4 * 60 * 1000,
   });
