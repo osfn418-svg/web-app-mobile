@@ -45,15 +45,10 @@ export default function TextToSpeechPage() {
   const [currentPlayingId, setCurrentPlayingId] = useState<string | null>(null);
   const { logActivity } = useActivityLogger();
   const { getToken } = useAuthToken();
-  const [authToken, setAuthToken] = useState<string>('');
-
-  useEffect(() => {
-    getToken().then(t => { if (t) setAuthToken(t); });
-  }, [getToken]);
 
   const poller = useTtsPolling({
     ttsUrl: TTS_URL,
-    authToken,
+    getAuthToken: getToken,
     intervalMs: 4000,
     timeoutMs: 4 * 60 * 1000,
   });
@@ -89,7 +84,6 @@ export default function TextToSpeechPage() {
         setLoading(false);
         return;
       }
-      setAuthToken(token);
       const response = await fetch(TTS_URL, {
         method: 'POST',
         headers: {

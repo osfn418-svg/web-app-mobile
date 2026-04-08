@@ -8,12 +8,12 @@ type CheckResponse =
 
 export function useTtsPolling({
   ttsUrl,
-  authToken,
+  getAuthToken,
   intervalMs = 2000,
   timeoutMs = 4 * 60 * 1000,
 }: {
   ttsUrl: string;
-  authToken: string;
+  getAuthToken: () => Promise<string | null>;
   intervalMs?: number;
   timeoutMs?: number;
 }) {
@@ -57,6 +57,14 @@ export function useTtsPolling({
       stop(id);
 
       const checkOnce = async () => {
+        const authToken = await getAuthToken();
+
+        if (!authToken) {
+          onFailed("يرجى تسجيل الدخول أولاً");
+          stop(id);
+          return true;
+        }
+
         const resp = await fetch(ttsUrl, {
           method: "POST",
           headers: {
@@ -71,7 +79,7 @@ export function useTtsPolling({
           const t = await resp.text().catch(() => "");
           onFailed(t || "فشل التحقق من حالة الصوت");
           stop(id);
-          return;
+          return true;
         }
 
         const data = (await resp.json()) as CheckResponse;
@@ -80,24 +88,28 @@ export function useTtsPolling({
           if ((data as any)?.audioData) {
             onCompleted(`data:audio/mpeg;base64,${(data as any).audioData}`);
             stop(id);
-            return;
+            return true;
           }
 
           if ((data as any)?.audioUrl) {
             onCompleted((data as any).audioUrl);
             stop(id);
-            return;
+            return true;
           }
         }
 
         if ((data as any)?.status === "failed") {
           onFailed((data as any)?.error || "فشل إنشاء الصوت");
           stop(id);
+          return true;
         }
+
+        return false;
       };
 
       // Kick off immediately
-      await checkOnce();
+      const finishedImmediately = await checkOnce();
+      if (finishedImmediately) return;
 
       const intervalId = window.setInterval(() => {
         void checkOnce();
@@ -110,7 +122,7 @@ export function useTtsPolling({
 
       timersRef.current.set(id, { intervalId, timeoutId });
     },
-    [authToken, intervalMs, stop, timeoutMs, ttsUrl]
+    [getAuthToken, intervalMs, stop, timeoutMs, ttsUrl]
   );
 
   return { start, stop, stopAll };
