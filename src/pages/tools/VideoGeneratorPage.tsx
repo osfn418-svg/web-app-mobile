@@ -46,6 +46,7 @@ export default function VideoGeneratorPage() {
   const pollingRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
   const progressRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
   const { logActivity } = useActivityLogger();
+  const { getToken } = useAuthToken();
 
   // Cleanup polling on unmount
   useEffect(() => {
