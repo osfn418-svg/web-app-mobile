@@ -86,11 +86,12 @@ export default function AudioGeneratorPage() {
     }
 
     try {
+      const token = await getToken();
       const response = await fetch(MUSIC_URL, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+          'Authorization': `Bearer ${token}`,
         },
         body: JSON.stringify({
           action: 'check',
