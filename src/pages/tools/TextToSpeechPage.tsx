@@ -16,6 +16,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Slider } from '@/components/ui/slider';
 import { useTtsPolling } from '@/hooks/useTtsPolling';
 import { useActivityLogger } from '@/hooks/useActivityLogger';
+import { useAuthToken } from '@/hooks/useAuthToken';
 
 interface GeneratedAudio {
   id: string;
