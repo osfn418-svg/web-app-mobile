@@ -12,7 +12,7 @@ export interface AuthResult {
 }
 
 /**
- * Validates JWT token from Authorization header using getClaims()
+ * Validates JWT token from Authorization header using getUser()
  * Returns user info if valid, error message if invalid
  */
 export async function validateAuth(req: Request): Promise<AuthResult> {
@@ -34,20 +34,18 @@ export async function validateAuth(req: Request): Promise<AuthResult> {
     global: { headers: { Authorization: authHeader } },
   });
 
-  const token = authHeader.replace("Bearer ", "");
-  
   try {
-    const { data, error } = await supabase.auth.getClaims(token);
+    const { data: { user }, error } = await supabase.auth.getUser();
     
-    if (error || !data?.claims) {
-      console.error("Auth validation error:", error?.message || "No claims");
+    if (error || !user) {
+      console.error("Auth validation error:", error?.message || "No user");
       return { user: null, error: "جلسة غير صالحة، يرجى تسجيل الدخول مرة أخرى" };
     }
 
     return {
       user: {
-        id: data.claims.sub as string,
-        email: data.claims.email as string | undefined,
+        id: user.id,
+        email: user.email,
       },
       error: null,
     };
