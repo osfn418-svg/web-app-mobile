@@ -161,11 +161,17 @@ export default function VideoGeneratorPage() {
     setLoading(true);
     
     try {
+      const token = await getToken();
+      if (!token) {
+        toast.error('يرجى تسجيل الدخول أولاً');
+        setLoading(false);
+        return;
+      }
       const response = await fetch(VIDEO_URL, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+          'Authorization': `Bearer ${token}`,
         },
         body: JSON.stringify({ 
           prompt,
