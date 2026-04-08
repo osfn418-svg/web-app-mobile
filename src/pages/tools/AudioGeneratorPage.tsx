@@ -44,6 +44,7 @@ export default function AudioGeneratorPage() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const pollingRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
   const { logActivity } = useActivityLogger();
+  const { getToken } = useAuthToken();
 
   const genres = [
     { id: 'ambient', label: 'أمبينت', emoji: '🌊' },
