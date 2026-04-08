@@ -17,6 +17,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { Progress } from '@/components/ui/progress';
 import { useActivityLogger } from '@/hooks/useActivityLogger';
+import { useAuthToken } from '@/hooks/useAuthToken';
 
 interface GeneratedVideo {
   id: string;
